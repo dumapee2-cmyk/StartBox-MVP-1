@@ -1,0 +1,4 @@
+{
+  "prompt": "Build a SaaS landing page with auth and dashboard",
+  "stack": "nextjs-tailwind-supabase"
+}

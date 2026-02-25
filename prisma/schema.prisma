@@ -1,0 +1,45 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model App {
+  id              String    @id @default(uuid())
+  short_id        String    @unique @default(cuid())
+  name            String
+  description     String
+  spec            Json
+  original_prompt String
+  forked_from     String?
+  generated_code  String?
+  theme_color     String?
+  tagline         String?
+  run_count       Int       @default(0)
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  runs            AppRun[]
+
+  @@index([short_id])
+  @@index([created_at])
+  @@map("apps")
+}
+
+model AppRun {
+  id          String   @id @default(uuid())
+  app_id      String
+  inputs      Json
+  output      Json
+  tokens_used Int
+  duration_ms Int
+  created_at  DateTime @default(now())
+
+  app         App      @relation(fields: [app_id], references: [id], onDelete: Cascade)
+
+  @@index([app_id, created_at])
+  @@map("app_runs")
+}
