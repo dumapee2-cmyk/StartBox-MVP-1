@@ -233,6 +233,7 @@ export async function runGenerationPipeline(prompt: string): Promise<PipelineRes
     primary_goal: prompt,
     domain: "AI tools",
     design_philosophy: "Clean, functional tool",
+    layout_archetype: "tabbed_tool" as const,
     nav_tabs: [
       { id: "analyze", label: "Analyze", icon: "🔍", layout: "analyzer", purpose: "Main analysis tool" },
       { id: "results", label: "Results", icon: "📊", layout: "dashboard", purpose: "View results" },

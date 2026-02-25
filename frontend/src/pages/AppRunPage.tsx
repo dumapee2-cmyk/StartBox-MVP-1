@@ -50,8 +50,9 @@ export function AppRunPage() {
     <div className="full-app-page">
       <header className="full-app-topbar">
         <Link to="/" className="topbar-logo">
-          <div className="topbar-logo-mark">⚡</div>
+          <div className="topbar-logo-mark">S</div>
           <span className="topbar-logo-text">StartBox</span>
+          <span className="topbar-badge">Beta</span>
         </Link>
         <div className="topbar-actions">
           <span className="topbar-app-name">{safeApp.name}</span>
@@ -60,14 +61,14 @@ export function AppRunPage() {
           )}
           {hasGeneratedCode && (
             <button className="btn btn-secondary btn-sm" onClick={handleDownload}>
-              ↓ Code
+              Download
             </button>
           )}
           <button
             className="btn btn-secondary btn-sm"
             onClick={handleShare}
           >
-            {shareCopied ? '✓ Copied!' : '🔗 Share'}
+            {shareCopied ? 'Copied' : 'Share'}
           </button>
         </div>
       </header>

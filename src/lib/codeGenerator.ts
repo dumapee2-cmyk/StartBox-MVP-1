@@ -27,12 +27,72 @@ ABSOLUTE RULES:
 9. Include realistic demo data visible on FIRST LOAD (not empty states)
 10. App must look like a polished SaaS product
 
-STRUCTURE REQUIRED:
-- Sticky header with: Logo/icon, app name, tab navigation, optional settings gear
-- 2-4 functional pages (main feature + results/history + settings at minimum)
-- Main feature page: form/input area + AI analysis trigger + results display
-- History page: list of past results stored in localStorage
-- Settings/About page: app description, tips, configuration
+STRUCTURE — determined by layout_archetype in the user message:
+
+IF layout_archetype === "tabbed_tool":
+  - Sticky header: Logo/icon, app name, horizontal tab navigation, optional settings gear
+  - 2-4 tab pages: main tool, results/history, settings
+  - Each tab: form → AI trigger → results display
+  - History stored in localStorage as clickable cards
+  - Reference: Cal AI, MyFitnessPal, Grammarly
+
+IF layout_archetype === "sidebar_dashboard":
+  - Left sidebar (w-64, bg-gray-900 or bg-slate-800): app icon/name at top, nav links with icons, settings at bottom
+  - Main content area: metric cards row at top (3-4 stats), then primary content below
+  - Active nav item highlighted with accent color in sidebar
+  - No horizontal tab bar — all navigation is in the sidebar
+  - Reference: Notion, Linear, Stripe Dashboard, Vercel Dashboard
+
+IF layout_archetype === "card_grid":
+  - Hero section at top: headline, subtitle, search/filter bar
+  - Category filter tabs or pills above the grid
+  - Masonry or uniform grid of cards (3-4 columns desktop, 1 mobile)
+  - Cards are interactive: click to expand, flip, or show detail modal
+  - Each card has: title, preview content, category tag, action button
+  - Reference: Pinterest, Quizlet, Dribbble, Product Hunt
+
+IF layout_archetype === "split_pane":
+  - Thin top bar: app name + settings icon
+  - Two columns (50/50 or 40/60): left = input panel with form, right = output/preview panel
+  - Output updates live on button click (or debounced typing)
+  - Clear visual divider between panes (border or subtle background change)
+  - No tab navigation — everything visible at once
+  - Reference: CodePen, Google Translate, Markdown editors
+
+IF layout_archetype === "wizard_stepper":
+  - Progress indicator at top: numbered step dots or labeled progress bar
+  - One step visible at a time, content centered in viewport (max-w-xl mx-auto)
+  - Back/Next buttons fixed at bottom of each step
+  - Steps: 2-4 input steps collecting different info, then final step shows AI results
+  - Final step has: restart button, save/copy result, rich formatted output
+  - Reference: TurboTax, Typeform, onboarding flows
+
+IF layout_archetype === "chat_interface":
+  - Message list taking ~80% of height, auto-scrolls to bottom
+  - Input bar fixed at bottom: textarea + send button, optional attachments
+  - Optional collapsible right sidebar (w-72) for context, settings, or saved items
+  - User messages: right-aligned, primary color bg, white text
+  - AI messages: left-aligned, gray bg, with structured formatting
+  - Typing indicator during AI processing
+  - Reference: ChatGPT, Claude, Intercom
+
+IF layout_archetype === "kanban_board":
+  - Top bar: app name, search, add new item button
+  - Horizontal scrolling board with 3-5 columns
+  - Each column: header with count, list of cards, "Add card" button at bottom
+  - Cards: title + brief details + category/priority tag + click to show detail modal
+  - Detail modal: full info, edit fields, move between columns
+  - Reference: Trello, Linear, Notion Board view
+
+IF layout_archetype === "landing_hero":
+  - Large hero section: big headline (text-4xl+), subtitle, prominent CTA button with primary color
+  - Features section below: 2-3 column grid of feature cards with icons
+  - Single scrolling page, NO tab navigation, NO sidebar
+  - CTA triggers the main AI action; results appear in-place below the hero
+  - After results: formatted display with copy button, "Try again" button
+  - Reference: Stripe, Vercel, Linear marketing pages
+
+CRITICAL: The layout_archetype determines the ENTIRE page structure. Do NOT add tab navigation to a sidebar_dashboard. Do NOT add a sidebar to a tabbed_tool. Do NOT add horizontal tabs to a split_pane. Follow the archetype strictly.
 
 AI INTEGRATION PATTERNS (pick the best for the domain):
 - Analyzer: User inputs → "Analyzing..." spinner → Structured results with score/grade/breakdown
@@ -55,8 +115,8 @@ STYLING REQUIREMENTS (use these exact patterns):
 - Loading: flex items-center gap-2 with animate-spin div
 - Score ring: SVG circle with strokeDasharray/strokeDashoffset for animated fill
 
-HISTORY FEATURE:
-Store results in localStorage as JSON array. Load on mount. Display as clickable cards in History tab.
+HISTORY FEATURE (for archetypes that support it — tabbed_tool, sidebar_dashboard, chat_interface):
+Store results in localStorage as JSON array. Load on mount. Display as clickable cards or list items.
 
 localStorage pattern:
 const STORAGE_KEY = 'APP_NAME_history';
@@ -64,7 +124,6 @@ const [history, setHistory] = useState(() => {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
   catch { return []; }
 });
-// After AI result: setHistory(prev => { const next = [newEntry, ...prev].slice(0, 20); localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); return next; });
 
 COPY TO CLIPBOARD:
 Always include copy buttons for generated content:
@@ -78,21 +137,24 @@ async function handleCopy(text) {
 ERROR HANDLING:
 Always wrap AI calls in try/catch. Show friendly error messages in a styled error banner.
 
-REFERENCE IMPLEMENTATIONS:
-1. Food Scanner (Cal AI style): Upload/paste meal description → Macro breakdown with calorie score ring (SVG), protein/carb/fat bars, meal history
-2. Resume Checker: Paste resume + job description → ATS score 0-100, keyword gap analysis, suggestions cards
-3. Email Writer: Bullet points + tone selector → Generated email with subject line options, copy button
-4. Business Validator: Idea description → Viability score, market size grade, competition analysis, monetization breakdown
-5. Caption Generator: Image description + platform → 5 caption variants with hashtag packages
-6. Study Planner: Subject + exam date → Day-by-day study schedule with topic breakdown
-7. Pricing Calculator: Product details + market → Price recommendation with competitor analysis
-8. Code Reviewer: Code snippet + language → Quality score, bug list, improvement suggestions
+REFERENCE IMPLEMENTATIONS (archetype → example):
+1. Food Scanner (tabbed_tool): Tab nav → photo/text input → Macro score ring + breakdown
+2. Resume Checker (split_pane): Left: paste resume + job desc. Right: live ATS score + keyword gaps
+3. Email Writer (split_pane): Left: bullet points + tone. Right: live email preview with copy
+4. Business Validator (wizard_stepper): Step 1: idea desc → Step 2: target market → Step 3: AI viability report
+5. Caption Generator (card_grid): Hero + platform filter → Grid of caption variants as cards
+6. Study Planner (sidebar_dashboard): Sidebar with subjects → Main: calendar view + study schedule
+7. Pricing Calculator (tabbed_tool): Tab 1: inputs form → Tab 2: competitive analysis
+8. Code Reviewer (split_pane): Left: paste code. Right: quality score + annotated feedback
+9. Project Manager (kanban_board): Columns: Backlog / In Progress / Review / Done
+10. AI Tutor (chat_interface): Message thread + side panel with topic outline
 
 FINAL CHECKLIST before outputting:
 ✓ No import statements
 ✓ Uses window.LucideReact with fallback
-✓ All pages functional
-✓ History with localStorage
+✓ Layout matches the specified layout_archetype
+✓ No tab navigation in non-tabbed layouts
+✓ No sidebar in non-sidebar layouts
 ✓ AI call uses window.__sbAI
 ✓ Primary color applied to CTAs and accents
 ✓ Demo data visible on first load
@@ -153,6 +215,7 @@ export async function generateReactCode(
     `App concept: ${intent.primary_goal}`,
     `Domain: ${intent.domain}`,
     `Design style: ${intent.design_philosophy}`,
+    `Layout archetype: ${intent.layout_archetype}`,
     `Reference app: ${intent.reference_app ?? "none"}`,
     `App name: ${intent.app_name_hint}`,
     `Primary color: ${intent.primary_color}`,

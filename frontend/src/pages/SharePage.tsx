@@ -48,11 +48,12 @@ export function SharePage() {
     <div className="full-app-page">
       <header className="full-app-topbar">
         <Link to="/" className="topbar-logo">
-          <div className="topbar-logo-mark">⚡</div>
+          <div className="topbar-logo-mark">S</div>
           <span className="topbar-logo-text">StartBox</span>
+          <span className="topbar-badge">Beta</span>
         </Link>
         <div className="topbar-actions">
-          <span className="topbar-badge">Shared App</span>
+          <span className="topbar-badge">Shared</span>
           <span className="topbar-app-name">{app.name}</span>
           {app.run_count > 0 && (
             <span className="run-count">{app.run_count} runs</span>
@@ -61,14 +62,14 @@ export function SharePage() {
             className="btn btn-secondary btn-sm"
             onClick={handleShare}
           >
-            {shareCopied ? '✓ Copied!' : '🔗 Share'}
+            {shareCopied ? 'Copied' : 'Share'}
           </button>
           <button
             className="btn btn-secondary btn-sm"
             onClick={handleFork}
             disabled={forking}
           >
-            {forking ? 'Cloning...' : '⑂ Clone App'}
+            {forking ? 'Duplicating...' : 'Duplicate'}
           </button>
         </div>
       </header>

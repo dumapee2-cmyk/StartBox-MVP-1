@@ -15,14 +15,15 @@ export function GalleryPage() {
 
   return (
     <div className="gallery-page">
-      <header className="gallery-header">
+      <header className="full-app-topbar">
         <Link to="/" className="topbar-logo">
-          <div className="topbar-logo-mark">⚡</div>
+          <div className="topbar-logo-mark">S</div>
           <span className="topbar-logo-text">StartBox</span>
+          <span className="topbar-badge">Beta</span>
         </Link>
-        <div className="gallery-header-right">
+        <div className="topbar-actions">
           <Link to="/" className="btn btn-primary btn-sm">
-            + Build an App
+            New Project
           </Link>
         </div>
       </header>
@@ -30,7 +31,7 @@ export function GalleryPage() {
       <div className="gallery-content">
         <div className="gallery-hero">
           <h1>App Gallery</h1>
-          <p>Explore AI apps built with StartBox. Clone any app and make it your own.</p>
+          <p>Explore projects built with StartBox. Clone any project and make it your own.</p>
         </div>
 
         {loading && (
@@ -46,10 +47,9 @@ export function GalleryPage() {
 
         {!loading && !error && apps.length === 0 && (
           <div className="gallery-empty">
-            <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📱</div>
-            <h3>No apps yet</h3>
-            <p>Be the first to build an AI app with StartBox.</p>
-            <Link to="/" className="btn btn-primary">Build an App →</Link>
+            <h3>No projects yet</h3>
+            <p>Create your first project to get started.</p>
+            <Link to="/" className="btn btn-primary">New Project</Link>
           </div>
         )}
 
@@ -84,7 +84,7 @@ export function GalleryPage() {
                   </div>
                 </div>
                 <div className="gallery-card-footer">
-                  <span className="gallery-card-cta">Open App →</span>
+                  <span className="gallery-card-cta">Open Project</span>
                 </div>
               </Link>
             ))}

@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { GeneratorProvider } from './contexts/GeneratorContext';
 import { GeneratorPage } from './pages/GeneratorPage';
 import { AppRunPage } from './pages/AppRunPage';
 import { SharePage } from './pages/SharePage';
@@ -9,6 +10,7 @@ import './index.css';
 export default function App() {
   return (
     <BrowserRouter>
+      <GeneratorProvider>
       <Routes>
         <Route path="/" element={<GeneratorPage />} />
         <Route path="/app/:id" element={<AppRunPage />} />
@@ -16,6 +18,7 @@ export default function App() {
         <Route path="/gallery" element={<GalleryPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
+      </GeneratorProvider>
     </BrowserRouter>
   );
 }
