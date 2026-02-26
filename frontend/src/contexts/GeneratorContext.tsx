@@ -26,6 +26,8 @@ interface GeneratorState {
   statusMessage: string | null;
   selectedModel: 'sonnet' | 'opus';
   editHistory: EditHistoryEntry[];
+  hasStartedGenerating: boolean;
+  lastPrompt: string | null;
 }
 
 interface GeneratorActions {
@@ -33,6 +35,7 @@ interface GeneratorActions {
   refine: (instruction: string) => Promise<void>;
   resetProject: () => void;
   setSelectedModel: (model: 'sonnet' | 'opus') => void;
+  retryGeneration: () => Promise<void>;
 }
 
 type GeneratorContextValue = GeneratorState & GeneratorActions;
@@ -57,6 +60,8 @@ const INITIAL_STATE: GeneratorState = {
   statusMessage: null,
   selectedModel: 'sonnet',
   editHistory: [],
+  hasStartedGenerating: false,
+  lastPrompt: null,
 };
 
 export function GeneratorProvider({ children }: { children: ReactNode }) {
@@ -84,6 +89,8 @@ export function GeneratorProvider({ children }: { children: ReactNode }) {
         liveCode: null,
         pipelineStep: 0,
         selectedModel: model,
+        hasStartedGenerating: true,
+        lastPrompt: prompt,
       }));
       advancePipeline(0);
 
@@ -178,12 +185,18 @@ export function GeneratorProvider({ children }: { children: ReactNode }) {
     setState((s) => ({ ...s, selectedModel: model }));
   }, []);
 
+  const retryGeneration = useCallback(async () => {
+    if (!state.lastPrompt) return;
+    await generate(state.lastPrompt, state.selectedModel);
+  }, [state.lastPrompt, state.selectedModel, generate]);
+
   const value: GeneratorContextValue = {
     ...state,
     generate,
     refine,
     resetProject,
     setSelectedModel,
+    retryGeneration,
   };
 
   return (

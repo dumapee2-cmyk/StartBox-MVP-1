@@ -1,12 +1,153 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
+
+export interface HoveredElement {
+  tagName: string;
+  text: string;
+  className: string;
+  rect: { top: number; left: number; width: number; height: number };
+  styles: {
+    backgroundColor: string;
+    color: string;
+    fontSize: string;
+    borderRadius: string;
+    padding: string;
+  };
+  path: string;
+}
 
 interface AppPreviewProps {
   code: string;
   appId: string;
   height?: string;
+  customizeMode?: boolean;
+  onElementHover?: (element: HoveredElement | null) => void;
+  onElementClick?: (element: HoveredElement) => void;
 }
 
-function buildIframeHtml(code: string, appId: string): string {
+function buildIframeHtml(code: string, appId: string, customizeMode: boolean): string {
+  const hoverScript = customizeMode ? `
+    // Hover-to-customize detection
+    (function() {
+      var currentHighlight = null;
+      var highlightOverlay = document.createElement('div');
+      highlightOverlay.id = 'sb-hover-overlay';
+      highlightOverlay.style.cssText = 'position:fixed;pointer-events:none;border:2px solid #2563eb;border-radius:4px;background:rgba(37,99,235,0.08);z-index:99999;display:none;transition:all 0.1s ease;';
+
+      var labelEl = document.createElement('div');
+      labelEl.style.cssText = 'position:absolute;top:-22px;left:0;background:#2563eb;color:#fff;font-size:10px;padding:2px 6px;border-radius:3px;font-family:system-ui;white-space:nowrap;';
+      highlightOverlay.appendChild(labelEl);
+
+      document.addEventListener('DOMContentLoaded', function() {
+        document.body.appendChild(highlightOverlay);
+      });
+
+      // Build a simple CSS path for identification
+      function getPath(el) {
+        var parts = [];
+        while (el && el !== document.body) {
+          var tag = el.tagName.toLowerCase();
+          if (el.id) { parts.unshift(tag + '#' + el.id); break; }
+          else if (el.className && typeof el.className === 'string') {
+            parts.unshift(tag + '.' + el.className.split(' ')[0]);
+          } else {
+            parts.unshift(tag);
+          }
+          el = el.parentElement;
+        }
+        return parts.join(' > ');
+      }
+
+      function isInteractive(el) {
+        var tag = el.tagName.toLowerCase();
+        var interactiveTags = ['button','a','input','select','textarea','img','h1','h2','h3','h4','h5','h6','p','span','div','li','label','nav','header','footer','section','main'];
+        return interactiveTags.includes(tag) || el.getAttribute('role') || el.onclick || el.style.cursor === 'pointer';
+      }
+
+      document.addEventListener('mousemove', function(e) {
+        var el = document.elementFromPoint(e.clientX, e.clientY);
+        if (!el || el === highlightOverlay || highlightOverlay.contains(el)) return;
+        if (el === document.body || el === document.documentElement) {
+          highlightOverlay.style.display = 'none';
+          window.parent.postMessage({ type: 'sb-hover', element: null }, '*');
+          return;
+        }
+
+        // Walk up to find a meaningful interactive element
+        var target = el;
+        var depth = 0;
+        while (target && depth < 4) {
+          if (isInteractive(target) && target.offsetWidth > 10 && target.offsetHeight > 10) break;
+          target = target.parentElement;
+          depth++;
+        }
+        if (!target || target === document.body) target = el;
+
+        if (target === currentHighlight) return;
+        currentHighlight = target;
+
+        var rect = target.getBoundingClientRect();
+        highlightOverlay.style.display = 'block';
+        highlightOverlay.style.top = rect.top + 'px';
+        highlightOverlay.style.left = rect.left + 'px';
+        highlightOverlay.style.width = rect.width + 'px';
+        highlightOverlay.style.height = rect.height + 'px';
+
+        var tag = target.tagName.toLowerCase();
+        labelEl.textContent = tag + (target.className && typeof target.className === 'string' ? '.' + target.className.split(' ')[0] : '');
+
+        var computed = window.getComputedStyle(target);
+        window.parent.postMessage({
+          type: 'sb-hover',
+          element: {
+            tagName: target.tagName,
+            text: (target.textContent || '').slice(0, 60),
+            className: typeof target.className === 'string' ? target.className : '',
+            rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
+            styles: {
+              backgroundColor: computed.backgroundColor,
+              color: computed.color,
+              fontSize: computed.fontSize,
+              borderRadius: computed.borderRadius,
+              padding: computed.padding
+            },
+            path: getPath(target)
+          }
+        }, '*');
+      });
+
+      document.addEventListener('mouseleave', function() {
+        highlightOverlay.style.display = 'none';
+        currentHighlight = null;
+        window.parent.postMessage({ type: 'sb-hover', element: null }, '*');
+      });
+
+      document.addEventListener('click', function(e) {
+        if (!currentHighlight) return;
+        e.preventDefault();
+        e.stopPropagation();
+        var rect = currentHighlight.getBoundingClientRect();
+        var computed = window.getComputedStyle(currentHighlight);
+        window.parent.postMessage({
+          type: 'sb-click',
+          element: {
+            tagName: currentHighlight.tagName,
+            text: (currentHighlight.textContent || '').slice(0, 60),
+            className: typeof currentHighlight.className === 'string' ? currentHighlight.className : '',
+            rect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height },
+            styles: {
+              backgroundColor: computed.backgroundColor,
+              color: computed.color,
+              fontSize: computed.fontSize,
+              borderRadius: computed.borderRadius,
+              padding: computed.padding
+            },
+            path: getPath(currentHighlight)
+          }
+        }, '*');
+      }, true);
+    })();
+  ` : '';
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -69,6 +210,8 @@ function buildIframeHtml(code: string, appId: string): string {
         String(msg) + (err ? '\\n' + String(err.stack || '') : '') +
         '</pre></div>';
     };
+
+    ${hoverScript}
   </script>
 
   <script type="text/babel" data-presets="react,env">
@@ -78,16 +221,30 @@ function buildIframeHtml(code: string, appId: string): string {
 </html>`;
 }
 
-export function AppPreview({ code, appId, height = '100%' }: AppPreviewProps) {
+export function AppPreview({ code, appId, height = '100%', customizeMode = false, onElementHover, onElementClick }: AppPreviewProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [iframeKey, setIframeKey] = useState(0);
 
   // Reload iframe when code changes
   useEffect(() => {
     setIframeKey((k) => k + 1);
-  }, [code, appId]);
+  }, [code, appId, customizeMode]);
 
-  const srcDoc = buildIframeHtml(code, appId);
+  // Listen for messages from iframe
+  const handleMessage = useCallback((event: MessageEvent) => {
+    if (event.data?.type === 'sb-hover') {
+      onElementHover?.(event.data.element);
+    } else if (event.data?.type === 'sb-click') {
+      onElementClick?.(event.data.element);
+    }
+  }, [onElementHover, onElementClick]);
+
+  useEffect(() => {
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [handleMessage]);
+
+  const srcDoc = buildIframeHtml(code, appId, customizeMode);
 
   return (
     <iframe
