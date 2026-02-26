@@ -8,6 +8,14 @@ import {
 } from 'react';
 import { api, type GenerateResult } from '../lib/api';
 
+export interface EditHistoryEntry {
+  id: string;
+  instruction: string;
+  summary: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';
+  timestamp: number;
+}
+
 interface GeneratorState {
   generatedApp: GenerateResult | null;
   liveCode: string | null;
@@ -17,6 +25,7 @@ interface GeneratorState {
   buildError: string | null;
   statusMessage: string | null;
   selectedModel: 'sonnet' | 'opus';
+  editHistory: EditHistoryEntry[];
 }
 
 interface GeneratorActions {
@@ -47,6 +56,7 @@ const INITIAL_STATE: GeneratorState = {
   buildError: null,
   statusMessage: null,
   selectedModel: 'sonnet',
+  editHistory: [],
 };
 
 export function GeneratorProvider({ children }: { children: ReactNode }) {
@@ -87,6 +97,13 @@ export function GeneratorProvider({ children }: { children: ReactNode }) {
           liveCode: result.generated_code ?? null,
           statusMessage: `${result.name} created successfully.`,
           generating: false,
+          editHistory: [{
+            id: crypto.randomUUID(),
+            instruction: prompt,
+            summary: `Created ${result.name}`,
+            status: 'completed',
+            timestamp: Date.now(),
+          }],
         }));
       } catch (err) {
         if (pipelineTimer.current) clearTimeout(pipelineTimer.current);
@@ -102,10 +119,27 @@ export function GeneratorProvider({ children }: { children: ReactNode }) {
   );
 
   const refine = useCallback(async (instruction: string) => {
+    const entryId = crypto.randomUUID();
+    const summary = instruction.length > 50
+      ? instruction.slice(0, 47) + '...'
+      : instruction;
+
     setState((prev) => {
       if (!prev.generatedApp) return prev;
       appIdRef.current = prev.generatedApp.id;
-      return { ...prev, refining: true, statusMessage: null, buildError: null };
+      return {
+        ...prev,
+        refining: true,
+        statusMessage: null,
+        buildError: null,
+        editHistory: [...prev.editHistory, {
+          id: entryId,
+          instruction,
+          summary,
+          status: 'in_progress',
+          timestamp: Date.now(),
+        }],
+      };
     });
 
     const appId = appIdRef.current;
@@ -118,12 +152,18 @@ export function GeneratorProvider({ children }: { children: ReactNode }) {
         liveCode: result.updated_code,
         statusMessage: 'Changes applied to preview.',
         refining: false,
+        editHistory: s.editHistory.map(e =>
+          e.id === entryId ? { ...e, status: 'completed' as const } : e
+        ),
       }));
     } catch (err) {
       setState((s) => ({
         ...s,
         buildError: err instanceof Error ? err.message : 'Update failed.',
         refining: false,
+        editHistory: s.editHistory.map(e =>
+          e.id === entryId ? { ...e, status: 'failed' as const } : e
+        ),
       }));
     }
   }, []);

@@ -1,5 +1,14 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useRecentApps } from '../hooks/useRecentApps';
+
+const CATEGORIES = [
+  { id: 'all', label: 'All Apps' },
+  { id: 'productivity', label: 'Productivity' },
+  { id: 'analysis', label: 'Business Tools' },
+  { id: 'content', label: 'Content' },
+  { id: 'lifestyle', label: 'Lifestyle' },
+];
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -12,6 +21,13 @@ function timeAgo(dateStr: string): string {
 
 export function GalleryPage() {
   const { apps, loading, error } = useRecentApps();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeCategory, setActiveCategory] = useState('all');
+
+  const filteredApps = apps.filter((app) => {
+    const matchesSearch = app.name.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesSearch;
+  });
 
   return (
     <div className="gallery-page">
@@ -30,8 +46,29 @@ export function GalleryPage() {
 
       <div className="gallery-content">
         <div className="gallery-hero">
-          <h1>App Gallery</h1>
-          <p>Explore projects built with StartBox. Clone any project and make it your own.</p>
+          <h1>App Templates</h1>
+          <p>Explore a curated collection of apps built with StartBox. Clone any project and make it your own.</p>
+        </div>
+
+        <div className="gallery-filters">
+          <input
+            className="gallery-search"
+            type="text"
+            placeholder="Search apps..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          <div className="gallery-categories">
+            {CATEGORIES.map((cat) => (
+              <button
+                key={cat.id}
+                className={`gallery-cat-btn${activeCategory === cat.id ? ' active' : ''}`}
+                onClick={() => setActiveCategory(cat.id)}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {loading && (
@@ -45,17 +82,17 @@ export function GalleryPage() {
           <div className="page-error">{error}</div>
         )}
 
-        {!loading && !error && apps.length === 0 && (
+        {!loading && !error && filteredApps.length === 0 && (
           <div className="gallery-empty">
-            <h3>No projects yet</h3>
-            <p>Create your first project to get started.</p>
+            <h3>No apps found</h3>
+            <p>{searchQuery ? 'Try a different search term.' : 'Create your first project to get started.'}</p>
             <Link to="/" className="btn btn-primary">New Project</Link>
           </div>
         )}
 
-        {!loading && apps.length > 0 && (
+        {!loading && filteredApps.length > 0 && (
           <div className="gallery-grid">
-            {apps.map((app) => (
+            {filteredApps.map((app) => (
               <Link
                 key={app.id}
                 to={`/app/${app.id}`}

@@ -62,4 +62,31 @@ export const TEMPLATES: Template[] = [
     tags: ['Business', 'Analysis'],
     category: 'analysis',
   },
+  {
+    id: 'reporting-dashboard',
+    name: 'Reporting Dashboard',
+    description: 'Interactive dashboard with charts and KPI tracking',
+    prompt:
+      'Build a reporting dashboard with charts showing sales KPIs, monthly trends, and team performance metrics with filters for date range and department.',
+    tags: ['Business', 'Data'],
+    category: 'analysis',
+  },
+  {
+    id: 'onboarding-portal',
+    name: 'Onboarding Portal',
+    description: 'Employee onboarding flow with progress tracking',
+    prompt:
+      'Build an employee onboarding portal that guides new hires through company policies, team introductions, and required training with progress tracking.',
+    tags: ['HR', 'Productivity'],
+    category: 'productivity',
+  },
+  {
+    id: 'project-manager',
+    name: 'Project Manager',
+    description: 'Task management with deadlines and team assignments',
+    prompt:
+      'Build a project management app with task boards, deadline tracking, team member assignments, and a dashboard showing active projects and overdue items.',
+    tags: ['Productivity', 'Teams'],
+    category: 'productivity',
+  },
 ];
