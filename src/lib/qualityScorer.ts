@@ -44,11 +44,14 @@ export function scoreGeneratedCode(input: QualityScoreInput): {
     /shadow-(sm|md|lg|xl)/,
     /tracking-/,
     /text-(2xl|3xl|4xl)/,
+    /sb-nav/,
+    /sb-stat/,
+    /sb-stagger/,
   ];
   const responsiveSignals = [/sm:/, /md:/, /lg:/, /xl:/, /overflow-x-auto/, /whitespace-nowrap/];
   const interactionSignals = [/onClick=/, /onChange=/, /transition/, /hover:/, /animate/, /useState/];
-  const completenessSignals = [/error/i, /loading/i, /empty/i, /history/i, /copy/i, /localStorage/];
-  const brandSignals = [/linear-gradient/, /primaryColor/, /--app-color/, /style=\{\{[^}]*background/i];
+  const completenessSignals = [/error/i, /loading/i, /empty/i, /history/i, /copy/i, /localStorage/, /sb-empty/, /sb-progress/, /sb-toggle/];
+  const brandSignals = [/--sb-primary/, /sb-primary/, /window\.__sb/, /sb-tag/, /sb-avatar/];
 
   let promptTokenMatches = 0;
   for (const token of promptTokens) {

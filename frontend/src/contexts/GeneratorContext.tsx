@@ -153,10 +153,10 @@ export function GeneratorProvider({ children }: { children: ReactNode }) {
     if (!appId) return;
 
     try {
-      const result = await api.refineApp(appId, instruction);
+      const result = await api.refineApp(appId, instruction, 'build');
       setState((s) => ({
         ...s,
-        liveCode: result.updated_code,
+        liveCode: result.updated_code ?? null,
         statusMessage: 'Changes applied to preview.',
         refining: false,
         editHistory: s.editHistory.map(e =>

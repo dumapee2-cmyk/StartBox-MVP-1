@@ -1,7 +1,6 @@
 import { prisma } from "./db.js";
 import { runGenerationPipeline } from "./pipeline.js";
 import { generateReactCode } from "./codeGenerator.js";
-import { gatherAppContext } from "./contextResearch.js";
 import type { GenerateResult } from "../types/index.js";
 import type { ProgressCallback } from "./progressEmitter.js";
 import { randomUUID } from "node:crypto";
@@ -11,33 +10,24 @@ export async function generateFromPrompt(
   model: "auto" | "sonnet" | "opus" = "auto",
   onProgress?: ProgressCallback,
 ): Promise<GenerateResult> {
-  // Always use Haiku (via "sonnet" path) for cost efficiency (~$0.07/gen)
+  // Always use Haiku (via "sonnet" path) for cost efficiency
   // Opus is only used if explicitly requested — never auto-selected
   const resolvedModel = model === "opus" ? "opus" : "sonnet";
 
   onProgress?.({ type: "status", message: "Analyzing your idea..." });
 
-  // Step 0+1: Run context research and reasoner in PARALLEL
-  // The reasoner works fine without context; context is passed to code gen where it matters most
-  console.log("Starting parallel: context research + reasoner...");
-  const [contextResult, pipelineResult] = await Promise.allSettled([
-    gatherAppContext(prompt),
-    runGenerationPipeline(prompt),
-  ]);
+  // Step 1: Run reasoner pipeline (Haiku) to extract structured intent
+  console.log("Starting reasoner pipeline...");
+  const { spec, intent } = await runGenerationPipeline(prompt);
 
-  let contextBrief = null;
-  if (contextResult.status === "fulfilled" && contextResult.value) {
-    contextBrief = contextResult.value;
-    console.log(`Context research: found ${contextBrief.competitive_landscape.length} competitors, ${contextBrief.must_have_features.length} must-have features`);
-    onProgress?.({ type: "status", message: "Researching similar apps..." });
-  } else {
-    console.log("Context research: no results (non-fatal)", contextResult.status === "rejected" ? contextResult.reason : "");
+  // Emit narrative event — AI self-dialogue before the plan
+  if (intent.narrative) {
+    onProgress?.({
+      type: "narrative",
+      message: intent.narrative,
+      data: { app_name: intent.app_name_hint },
+    });
   }
-
-  if (pipelineResult.status === "rejected") {
-    throw pipelineResult.reason;
-  }
-  const { spec, intent } = pipelineResult.value;
 
   // Emit plan event with structured data from the reasoner
   onProgress?.({
@@ -49,10 +39,11 @@ export async function generateFromPrompt(
       design: intent.design_philosophy,
       tabs: intent.nav_tabs.map((t: { label: string; icon: string }) => t.label),
       features: intent.premium_features ?? [],
+      feature_details: intent.feature_details ?? [],
     },
   });
 
-  onProgress?.({ type: "status", message: "Generating code..." });
+  onProgress?.({ type: "status", message: "Generating application code..." });
 
   // Step 2: Generate real React code using the intent + context
   // onProgress is threaded through so code gen emits real-time "writing" events
@@ -67,7 +58,7 @@ export async function generateFromPrompt(
   let pipelineArtifact: unknown = null;
 
   try {
-    const codeResult = await generateReactCode(intent, prompt, resolvedModel, contextBrief, onProgress);
+    const codeResult = await generateReactCode(intent, prompt, resolvedModel, onProgress);
     if (codeResult) {
       generated_code = codeResult.generated_code;
       theme_color = codeResult.primary_color;
@@ -78,20 +69,21 @@ export async function generateFromPrompt(
       latest_pipeline_summary = `Selected ${codeResult.pipeline_artifact.selected_candidate} (${codeResult.quality_score}/100)`;
       pipelineArtifact = codeResult.pipeline_artifact;
 
-      onProgress?.({
-        type: "quality",
-        message: `Quality score: ${codeResult.quality_score}/100`,
-        data: {
-          score: codeResult.quality_score,
-          breakdown: codeResult.quality_breakdown,
-        },
-      });
+      // Quality score tracked internally but not shown to user
+    } else {
+      console.warn("Code generation returned null — app will be spec-only");
+      onProgress?.({ type: "status", message: "Code generation did not produce output" });
     }
   } catch (e) {
-    console.error("React code generation error (non-fatal):", e);
+    const errMsg = e instanceof Error ? e.message : String(e);
+    console.error("React code generation error (non-fatal):", errMsg);
+    onProgress?.({ type: "status", message: `Code generation error: ${errMsg.slice(0, 80)}` });
   }
 
-  // Step 3: Store in DB
+  // Step 3: Delete all previous apps (MVP — only keep latest generation)
+  await prisma.app.deleteMany();
+
+  // Step 4: Store in DB
   onProgress?.({ type: "status", message: "Saving your app..." });
   const app = await prisma.app.create({
     data: {

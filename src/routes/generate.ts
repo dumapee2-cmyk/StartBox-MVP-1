@@ -61,7 +61,13 @@ generateRouter.post("/", generateRateLimiter, async (req, res) => {
         }
       } catch (error) {
         if (!disconnected) {
-          const msg = error instanceof Error ? error.message : "Generation failed";
+          let msg = "Generation failed";
+          if (error instanceof ZodError) {
+            msg = "App configuration error — please try a different prompt";
+            console.error("Zod validation error in generation:", error.issues);
+          } else if (error instanceof Error) {
+            msg = error.message;
+          }
           res.write(`data: ${JSON.stringify({ type: "error", message: msg })}\n\n`);
         }
       } finally {

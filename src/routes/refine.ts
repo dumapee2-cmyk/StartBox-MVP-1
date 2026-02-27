@@ -27,8 +27,8 @@ const BUILD_MODE_SYSTEM_PROMPT = `You are an expert React developer. Your job is
 RULES:
 1. Return ONLY the modified code — no explanation, no markdown code blocks, just raw JSX
 2. Preserve all existing functionality — only change what was asked
-3. Keep the same structure: no import statements, window.LucideReact for icons, window.__sbAI for AI calls
-4. The last line must remain: ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+3. Keep the same structure: const h = React.createElement as first line, window.LucideReact for icons, window.__sbAI for AI calls, window.__sb.cn for className joining
+4. The last line must remain: ReactDOM.createRoot(document.getElementById('root')).render(h(App));
 5. Make minimal targeted changes — don't rewrite the whole app
 6. If asked to change color: update the primary color hex value throughout the code
 7. If asked to add a feature: add it cleanly without breaking existing features
@@ -37,7 +37,7 @@ RULES:
 const VISUAL_EDIT_SYSTEM_PROMPT = `You are a senior UI engineer focused ONLY on visual edits.
 
 RULES:
-1. Return ONLY modified raw JSX code.
+1. Return ONLY modified code. Use h = React.createElement pattern, not JSX.
 2. You may change styling, spacing, typography, color, animation, and layout.
 3. You must NOT add/remove core product features or change business logic.
 4. Keep all AI call logic and state behavior intact.

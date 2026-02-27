@@ -3,9 +3,14 @@ import { translateEnglishPromptWithReasoning, type ReasonedIntent } from "./reas
 import type { AppContextBrief } from "./contextResearch.js";
 import type { AppSpec } from "../types/index.js";
 
+// Sanitize nav IDs to match schema regex /^[a-z_]+$/
+function sanitizeNavId(id: string): string {
+  return id.toLowerCase().replace(/[^a-z_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '') || 'tab';
+}
+
 function buildDeterministicAppSpec(intent: ReasonedIntent, originalPrompt: string): AppSpec {
   const screens = intent.nav_tabs.map((tab, i) => ({
-    nav_id: tab.id,
+    nav_id: sanitizeNavId(tab.id),
     layout: tab.layout,
     hero: {
       title: i === 0 ? intent.primary_goal.slice(0, 60) : tab.purpose.slice(0, 60),
@@ -14,9 +19,9 @@ function buildDeterministicAppSpec(intent: ReasonedIntent, originalPrompt: strin
     },
     input_fields: [{
       key: "input",
-      label: intent.domain.charAt(0).toUpperCase() + intent.domain.slice(1) + " Input",
+      label: (intent.domain.charAt(0).toUpperCase() + intent.domain.slice(1) + " Input").slice(0, 80),
       type: "textarea" as const,
-      placeholder: `Describe your ${intent.domain} here...`,
+      placeholder: `Describe your ${intent.domain.slice(0, 60)} here...`.slice(0, 500),
       required: true,
     }],
     ai_logic: {
@@ -39,7 +44,7 @@ function buildDeterministicAppSpec(intent: ReasonedIntent, originalPrompt: strin
       style: intent.theme_style,
       icon: intent.app_icon,
     },
-    navigation: intent.nav_tabs.map((t) => ({ id: t.id, label: t.label, icon: t.icon })),
+    navigation: intent.nav_tabs.map((t) => ({ id: sanitizeNavId(t.id), label: t.label, icon: t.icon })),
     screens,
   };
 }
@@ -77,6 +82,11 @@ export async function runGenerationPipeline(
     theme_style: "light",
     app_icon: "Zap",
     output_format_hint: "markdown",
+    narrative: `I'll build an AI-powered tool based on your request: "${prompt.slice(0, 100)}".`,
+    feature_details: [
+      { name: "AI analysis", description: "Intelligent analysis powered by AI" },
+      { name: "Instant results", description: "Get results in seconds" },
+    ],
     reasoning_summary: "Fallback: no LLM available",
   };
 

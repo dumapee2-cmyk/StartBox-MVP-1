@@ -149,7 +149,7 @@ export interface PipelineRunArtifact {
 
 // ── SSE streaming types ──
 
-export type ProgressEventType = 'status' | 'plan' | 'writing' | 'created' | 'quality' | 'done' | 'error';
+export type ProgressEventType = 'status' | 'narrative' | 'plan' | 'writing' | 'created' | 'quality' | 'done' | 'error';
 
 export interface ProgressEvent {
   type: ProgressEventType;

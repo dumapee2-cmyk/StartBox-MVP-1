@@ -1,5 +1,6 @@
 export type ProgressEventType =
   | "status"
+  | "narrative"
   | "plan"
   | "writing"
   | "created"

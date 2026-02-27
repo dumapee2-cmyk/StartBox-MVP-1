@@ -28,6 +28,8 @@ const reasonedIntentSchema = z.object({
   output_format_hint: z.enum(["markdown", "cards", "score_card", "report", "list", "plain"]),
   layout_blueprint: z.string().optional(),
   animation_keywords: z.array(z.string()).min(1).max(3).optional(),
+  narrative: z.string().min(1).max(300),
+  feature_details: z.array(z.object({ name: z.string(), description: z.string() })).min(1).max(10),
   reasoning_summary: z.string().min(1),
 });
 
@@ -92,6 +94,12 @@ ANIMATION KEYWORDS (pick 1-3 that match the product personality):
 QUALITY STANDARD:
 This app must feel like a COMMERCIAL PRODUCT someone would pay $29/month for. All field labels must be domain-specific. No generic placeholders. No chatbox interfaces. Every design choice should be informed by what real products in this space look like.
 
+NARRATIVE FIELD:
+Write a 1-2 sentence "narrative" in first person ("I'll create...") describing what you're about to build and WHY it's useful. Be specific about the domain and value proposition. Example: "I'll create a smart clipboard manager that stores, organizes, and makes your clipboard history searchable and easily accessible."
+
+FEATURE DETAILS:
+For each item in premium_features, provide a matching entry in feature_details with a "name" (same as the feature) and a "description" (one sentence explaining what it does for the user). Example: { name: "Clipboard History", description: "Stores and organizes everything you copy for instant recall" }
+
 When competitive research context is provided, USE IT to inform your decisions about features, colors, layout, and terminology. Do not ignore it.
 
 Extract the user's intent even if their prompt has typos or is vague. Infer from context.`;
@@ -145,6 +153,22 @@ const toolInputSchema = {
     output_format_hint: { type: "string", enum: ["markdown", "cards", "score_card", "report", "list", "plain"] },
     layout_blueprint: { type: "string", description: "Spatial layout pattern: 'centered-hero-input-results', 'split-form-output', 'centered-card-tool', 'grid-dashboard', or 'timeline-planner'" },
     animation_keywords: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 3, description: "Animation style words: e.g. ['smooth', 'subtle', 'precise'] or ['bouncy', 'playful', 'energetic']" },
+    narrative: { type: "string", description: "1-2 sentence first-person description of what you'll build: 'I'll create a smart clipboard manager that stores, organizes, and makes your clipboard history searchable.'" },
+    feature_details: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          name: { type: "string", description: "Feature name (2-4 words)" },
+          description: { type: "string", description: "One sentence explaining what this feature does for the user" },
+        },
+        required: ["name", "description"],
+      },
+      minItems: 1,
+      maxItems: 10,
+      description: "Key features with short user-facing descriptions",
+    },
     reasoning_summary: { type: "string" },
   },
   required: [
@@ -152,7 +176,8 @@ const toolInputSchema = {
     "design_philosophy", "target_user", "key_differentiator",
     "visual_style_keywords", "premium_features",
     "nav_tabs", "primary_color", "theme_style",
-    "app_icon", "output_format_hint", "reasoning_summary",
+    "app_icon", "output_format_hint",
+    "narrative", "feature_details", "reasoning_summary",
   ],
 };
 

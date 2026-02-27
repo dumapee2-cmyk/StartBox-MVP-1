@@ -12,7 +12,7 @@ import { SettingsSection } from '../components/dashboard/sections/SettingsSectio
 import { PlaceholderSection } from '../components/dashboard/sections/PlaceholderSection';
 
 type ChatRole = 'user' | 'ai';
-type ChatType = 'message' | 'progress' | 'error';
+type ChatType = 'message' | 'error' | 'narrative' | 'plan' | 'building' | 'writing' | 'created' | 'quality';
 
 interface ChatMessage {
   id: string;
@@ -20,6 +20,7 @@ interface ChatMessage {
   content: string;
   type: ChatType;
   timestamp: number;
+  data?: Record<string, unknown>;
 }
 
 interface PlanData {
@@ -27,6 +28,7 @@ interface PlanData {
   domain: string;
   design: string;
   features: string[];
+  feature_details: Array<{ name: string; description: string }>;
   tabs: string[];
 }
 
@@ -57,6 +59,24 @@ const STARTER_PROMPTS = [
   'Make a recipe organizer app',
   'Build a customer CRM dashboard',
 ];
+
+const MODEL_OPTIONS: Array<{ id: 'sonnet' | 'opus'; name: string; shortName: string; desc: string }> = [
+  { id: 'sonnet', name: 'Claude Sonnet 4.6', shortName: 'Sonnet 4.6', desc: 'Fast & high quality' },
+  { id: 'opus', name: 'Claude Opus 4.6', shortName: 'Opus 4.6', desc: 'Maximum quality' },
+];
+
+function ClaudeLogo({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+      <path
+        d="M8 1.5v5M8 9.5v5M1.5 8h5M9.5 8h5M3.4 3.4l3.5 3.5M9.1 9.1l3.5 3.5M12.6 3.4l-3.5 3.5M6.9 9.1l-3.5 3.5"
+        stroke="#e8734a"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
 
 let msgCounter = 0;
 function newId() { return String(++msgCounter); }
@@ -99,26 +119,25 @@ export function GeneratorPage() {
   const [refining, setRefining] = useState(false);
   const [generatedApp, setGeneratedApp] = useState<GenerateResult | null>(restored.current?.generatedApp ?? null);
   const [liveCode, setLiveCode] = useState<string | null>(restored.current?.liveCode ?? null);
-  const [selectedModel] = useState<'sonnet' | 'opus'>(restored.current?.selectedModel ?? 'sonnet');
+  const [selectedModel, setSelectedModel] = useState<'sonnet' | 'opus'>(restored.current?.selectedModel ?? 'sonnet');
   const [shareCopied, setShareCopied] = useState(false);
   const [rightPanelMode, setRightPanelMode] = useState<'preview' | 'dashboard'>('preview');
   const [activeSection, setActiveSection] = useState('overview');
   const [fullApp, setFullApp] = useState<AppRecord | null>(null);
   const [workbenchMode, setWorkbenchMode] = useState<'build' | 'visual_edit' | 'discuss'>(restored.current?.workbenchMode ?? 'build');
   const [previewRefreshTick, setPreviewRefreshTick] = useState(0);
+  const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<(() => void) | null>(null);
   const mountedRef = useRef(true);
+  const modelDropdownRef = useRef<HTMLDivElement>(null);
 
-  // ── Streaming state ──
+  // ── Streaming state (transient only — events go into chatHistory) ──
   const [statusMessage, setStatusMessage] = useState('');
-  const [planData, setPlanData] = useState<PlanData | null>(null);
-  const [writtenComponents, setWrittenComponents] = useState<string[]>([]);
-  const [createdAll, setCreatedAll] = useState(false);
-  const [qualityScore, setQualityScore] = useState<number | null>(null);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [currentTipIndex, setCurrentTipIndex] = useState(0);
   const [genStartTime, setGenStartTime] = useState<number | null>(null);
+  const planRef = useRef<PlanData | null>(null);
 
   // ── Event queue for anti-batching ──
   const eventQueueRef = useRef<ProgressEvent[]>([]);
@@ -134,10 +153,22 @@ export function GeneratorPage() {
     return () => { mountedRef.current = false; };
   }, []);
 
+  // Close model dropdown on click outside
+  useEffect(() => {
+    if (!modelDropdownOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (modelDropdownRef.current && !modelDropdownRef.current.contains(e.target as Node)) {
+        setModelDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [modelDropdownOpen]);
+
   // Auto-scroll chat
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatHistory, writtenComponents, createdAll, planData, qualityScore, suggestions]);
+  }, [chatHistory, suggestions]);
 
   // Rotate tips during generation
   useEffect(() => {
@@ -165,7 +196,7 @@ export function GeneratorPage() {
     setChatHistory((prev) => [...prev, { id: newId(), role, content, type, timestamp: Date.now() }]);
   }
 
-  // ── Event queue processor ──
+  // ── Event queue processor — events become persistent chat messages ──
   function processNext() {
     if (!mountedRef.current) { processingRef.current = false; return; }
     const event = eventQueueRef.current.shift();
@@ -177,25 +208,56 @@ export function GeneratorPage() {
         setStatusMessage(event.message);
         delay = 0;
         break;
-      case 'plan':
-        setPlanData(event.data as unknown as PlanData);
+      case 'narrative':
+        setChatHistory((prev) => [
+          ...prev,
+          { id: newId(), role: 'ai', content: event.message, type: 'narrative', timestamp: Date.now(), data: event.data },
+        ]);
+        delay = 400;
+        break;
+      case 'plan': {
+        const plan = event.data as unknown as PlanData;
+        planRef.current = plan;
+        // Build flowing narrative text instead of a structured card
+        const featureDetails = plan.feature_details ?? [];
+        const features = featureDetails.length > 0
+          ? featureDetails.map((f, i) => `${i + 1}. ${f.name} — ${f.description}`).join('\n')
+          : (plan.features ?? []).map((f, i) => `${i + 1}. ${f}`).join('\n');
+        const planText = [
+          `**${plan.app_name}**`,
+          `${plan.domain}${plan.design ? ' · ' + plan.design : ''}`,
+          '',
+          'Key Features:',
+          features,
+          '',
+          `Pages: ${(plan.tabs ?? []).join(', ')}`,
+        ].join('\n');
+        setChatHistory((prev) => [
+          ...prev,
+          { id: newId(), role: 'ai', content: planText, type: 'plan', timestamp: Date.now(), data: event.data },
+        ]);
         delay = 300;
         break;
+      }
       case 'writing':
-        setWrittenComponents((prev) => {
-          const name = (event.data?.component as string) ?? event.message;
-          if (prev.includes(name)) return prev;
-          return [...prev, name];
+        setChatHistory((prev) => {
+          const isMilestone = !!(event.data?.milestone);
+          const content = isMilestone ? event.message : ((event.data?.path as string) ?? (event.data?.component as string) ?? event.message);
+          if (prev.some((m) => m.type === 'writing' && m.content === content)) return prev;
+          return [...prev, { id: newId(), role: 'ai', content, type: 'writing', timestamp: Date.now(), data: event.data }];
         });
-        delay = 180;
+        delay = event.data?.milestone ? 250 : 180;
         break;
       case 'created':
-        setCreatedAll(true);
+        setChatHistory((prev) => [
+          ...prev,
+          { id: newId(), role: 'ai', content: 'Created', type: 'created', timestamp: Date.now() },
+        ]);
         delay = 100;
         break;
       case 'quality':
-        setQualityScore((event.data as { score?: number })?.score ?? null);
-        delay = 200;
+        // Quality tracked internally, not shown in chat
+        delay = 0;
         break;
       case 'done': {
         const result = event.data as unknown as GenerateResult;
@@ -225,12 +287,21 @@ export function GeneratorPage() {
     setLiveCode(result.generated_code ?? null);
     setRightPanelMode('preview');
 
-    const elapsed = genStartTime ? Math.round((Date.now() - genStartTime) / 1000) : null;
-    const scoreText = result.quality_score ? ` Quality score: ${result.quality_score}/100.` : '';
-    const timeText = elapsed ? ` Built in ${elapsed}s.` : '';
-    addMessage('ai', `${result.name} is ready!${scoreText}${timeText}`);
+    if (!result.generated_code) {
+      addMessage('ai', 'Generation completed but no code was produced. This can happen due to a timeout or API issue. Please try again.', 'error');
+      return;
+    }
 
-    const features = planData?.features ?? [];
+    const elapsed = genStartTime ? Math.round((Date.now() - genStartTime) / 1000) : null;
+    const featureCount = planRef.current?.features?.length ?? 0;
+    const tabCount = planRef.current?.tabs?.length ?? 0;
+    const summary = `${result.name} is ready! ` +
+      (featureCount > 0 ? `Built with ${featureCount} features across ${tabCount} pages. ` : '') +
+      (elapsed ? `Generated in ${elapsed}s. ` : '') +
+      'You can refine it using Build, Visual, or Discuss modes below.';
+    addMessage('ai', summary);
+
+    const features = planRef.current?.features ?? [];
     setSuggestions(
       features.slice(0, 3).map((f) => `Enhance the ${f.toLowerCase()}`)
     );
@@ -255,13 +326,10 @@ export function GeneratorPage() {
     setFullApp(null);
 
     setStatusMessage('Analyzing your idea...');
-    setPlanData(null);
-    setWrittenComponents([]);
-    setCreatedAll(false);
-    setQualityScore(null);
     setSuggestions([]);
     setCurrentTipIndex(0);
     setGenStartTime(Date.now());
+    planRef.current = null;
     eventQueueRef.current = [];
     processingRef.current = false;
 
@@ -417,80 +485,103 @@ export function GeneratorPage() {
           {/* Chat area — shown during generation AND after generation */}
           {showSplit && (
             <div className="gen-chat">
-              {chatHistory.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={`gen-msg gen-msg--${msg.role}${msg.type === 'error' ? ' gen-msg--error' : ''}${msg.type === 'progress' ? ' gen-msg--progress' : ''}`}
-                >
-                  <div className={`gen-msg-avatar gen-msg-avatar--${msg.role}`}>
-                    {msg.role === 'ai' ? 'S' : 'U'}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    {msg.type === 'progress' && <span className="gen-msg-spinner" />}
-                    <span>{msg.content}</span>
+              {chatHistory.map((msg) => {
+                switch (msg.type) {
+                  case 'narrative':
+                    return (
+                      <div key={msg.id} className="gen-msg gen-msg--ai">
+                        <div className="gen-msg-avatar gen-msg-avatar--ai">S</div>
+                        <div className="gen-msg-body">{msg.content}</div>
+                      </div>
+                    );
+                  case 'plan': {
+                    // Render plan as flowing text with markdown-like formatting
+                    const lines = msg.content.split('\n');
+                    return (
+                      <div key={msg.id} className="gen-msg gen-msg--ai gen-msg--plan-text">
+                        <div className="gen-msg-avatar gen-msg-avatar--ai">S</div>
+                        <div className="gen-msg-body">
+                          {lines.map((line, i) => {
+                            if (!line.trim()) return <div key={i} style={{ height: 6 }} />;
+                            if (line.startsWith('**') && line.endsWith('**'))
+                              return <div key={i} className="gen-plan-name">{line.slice(2, -2)}</div>;
+                            if (/^\d+\.\s/.test(line)) {
+                              const [num, ...rest] = line.split('. ');
+                              const text = rest.join('. ');
+                              const [name, desc] = text.includes(' — ') ? text.split(' — ') : [text, ''];
+                              return (
+                                <div key={i} className="gen-plan-line">
+                                  <span className="gen-plan-num">{num}.</span>
+                                  <span><strong>{name}</strong>{desc ? ` — ${desc}` : ''}</span>
+                                </div>
+                              );
+                            }
+                            if (line.startsWith('Key Features:'))
+                              return <div key={i} className="gen-plan-section">{line}</div>;
+                            if (line.startsWith('Pages:'))
+                              return <div key={i} className="gen-plan-pages">{line}</div>;
+                            return <div key={i} className="gen-plan-meta">{line}</div>;
+                          })}
+                        </div>
+                      </div>
+                    );
+                  }
+                  case 'building':
+                    return (
+                      <div key={msg.id} className="gen-msg gen-msg--ai">
+                        <div className="gen-msg-avatar gen-msg-avatar--ai">S</div>
+                        <span>{msg.content}</span>
+                      </div>
+                    );
+                  case 'writing':
+                    return (
+                      <div key={msg.id} className={`gen-msg gen-msg--writing${msg.data?.milestone ? ' gen-msg--milestone' : ''}`}>
+                        <span className="writing-indicator" />
+                        {msg.data?.milestone ? (
+                          <span className="writing-milestone-text">{msg.content}</span>
+                        ) : (
+                          <span className="writing-file-text">
+                            <span className="writing-action">Wrote</span>
+                            <span className="writing-path">{msg.content}</span>
+                          </span>
+                        )}
+                      </div>
+                    );
+                  case 'created':
+                    return (
+                      <div key={msg.id} className="gen-msg gen-msg--created">
+                        <span className="created-check">&#10003;</span>
+                        <span>Components created</span>
+                      </div>
+                    );
+                  case 'quality':
+                    return null;
+                  default:
+                    return (
+                      <div
+                        key={msg.id}
+                        className={`gen-msg gen-msg--${msg.role}${msg.type === 'error' ? ' gen-msg--error' : ''}`}
+                      >
+                        <div className={`gen-msg-avatar gen-msg-avatar--${msg.role}`}>
+                          {msg.role === 'ai' ? 'S' : 'U'}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <span>{msg.content}</span>
+                        </div>
+                      </div>
+                    );
+                }
+              })}
+
+              {/* Transient status spinner — only during generation, disappears when done */}
+              {generating && statusMessage && (
+                <div className="gen-msg gen-msg--ai gen-msg--progress">
+                  <div className="gen-msg-avatar gen-msg-avatar--ai">S</div>
+                  <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span className="gen-msg-spinner" />
+                    <span>{statusMessage}</span>
                   </div>
                 </div>
-              ))}
-
-              {/* ── Streaming progress (only during generation) ── */}
-              {generating && (
-                <>
-                  {statusMessage && !planData && (
-                    <div className="gen-msg gen-msg--ai gen-msg--progress">
-                      <div className="gen-msg-avatar gen-msg-avatar--ai">S</div>
-                      <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span className="gen-msg-spinner" />
-                        <span>{statusMessage}</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {planData && (
-                    <div className="gen-msg--plan">
-                      <div className="gen-plan-title">{planData.app_name}</div>
-                      <div className="gen-plan-domain">{planData.domain}</div>
-                      {planData.features.length > 0 && (
-                        <div className="gen-plan-features">
-                          {planData.features.map((f) => (
-                            <span key={f} className="gen-plan-chip">{f}</span>
-                          ))}
-                        </div>
-                      )}
-                      {planData.tabs.length > 0 && (
-                        <div className="gen-plan-tabs">
-                          {planData.tabs.map((t) => (
-                            <span key={t} className="gen-plan-tab">{t}</span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {writtenComponents.map((name, i) => (
-                    <div
-                      key={`w-${name}`}
-                      className="gen-msg gen-msg--writing"
-                      style={{ animationDelay: `${i * 0.05}s` }}
-                    >
-                      <span className="writing-dot" />
-                      <span>Wrote <strong>{name}</strong></span>
-                    </div>
-                  ))}
-
-                  {createdAll && (
-                    <div className="gen-msg gen-msg--created">
-                      <span className="created-check">&#10003;</span>
-                      <span>Created</span>
-                    </div>
-                  )}
-
-                  {qualityScore !== null && (
-                    <div className="gen-msg gen-msg--quality">
-                      <span className="gen-quality-score">{qualityScore}</span>
-                      <span className="gen-quality-label">/100 quality score</span>
-                    </div>
-                  )}
-                </>
               )}
 
               {/* Suggestion chips (after generation) */}
@@ -559,7 +650,47 @@ export function GeneratorPage() {
                 disabled={isWorking}
               />
               <div className="gen-input-footer">
-                <span className="gen-input-hint">Quality-first pipeline</span>
+                {!hasApp && !generating ? (
+                  <div className="gen-model-selector" ref={modelDropdownRef}>
+                    <button
+                      type="button"
+                      className="gen-model-trigger"
+                      onClick={() => setModelDropdownOpen((v) => !v)}
+                    >
+                      <ClaudeLogo size={14} />
+                      <span>{MODEL_OPTIONS.find((m) => m.id === selectedModel)?.shortName}</span>
+                      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" style={{ flexShrink: 0, opacity: 0.5 }}>
+                        <path d="M2.5 4L5 6.5L7.5 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </button>
+                    {modelDropdownOpen && (
+                      <div className="gen-model-dropdown">
+                        <div className="gen-model-dropdown-label">Model</div>
+                        {MODEL_OPTIONS.map((model) => (
+                          <button
+                            key={model.id}
+                            type="button"
+                            className={`gen-model-option${selectedModel === model.id ? ' gen-model-option--active' : ''}`}
+                            onClick={() => { setSelectedModel(model.id); setModelDropdownOpen(false); }}
+                          >
+                            <ClaudeLogo size={16} />
+                            <div className="gen-model-option-info">
+                              <span className="gen-model-option-name">{model.name}</span>
+                              <span className="gen-model-option-desc">{model.desc}</span>
+                            </div>
+                            {selectedModel === model.id && (
+                              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="gen-model-check">
+                                <path d="M3.5 8.5L6.5 11.5L12.5 5.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <span className="gen-input-hint">Quality-first pipeline</span>
+                )}
                 <button type="submit" className="gen-input-submit" disabled={isWorking || !prompt.trim()}>
                   {isWorking ? 'Working...' : hasApp ? (workbenchMode === 'discuss' ? 'Discuss' : 'Apply') : 'Generate'}
                 </button>
