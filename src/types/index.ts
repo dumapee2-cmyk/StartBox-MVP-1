@@ -58,6 +58,55 @@ export interface AppRunOutput {
   format: OutputFormat;
 }
 
+export interface QualityBreakdown {
+  visual_hierarchy: number;
+  domain_specificity: number;
+  responsiveness: number;
+  interaction_richness: number;
+  component_completeness: number;
+  brand_cohesion: number;
+  output_format_compliance: number;
+}
+
+export interface PipelineRunArtifact {
+  run_id: string;
+  stages: string[];
+  ui_blueprint?: UIBlueprint;
+  selected_candidate: "A" | "B";
+  candidates: Array<{
+    id: "A" | "B";
+    quality_score: number;
+    quality_breakdown: QualityBreakdown;
+  }>;
+  repaired: boolean;
+}
+
+export interface UIBlueprint {
+  layout_skeleton: string[];
+  design_tokens: {
+    primary_color: string;
+    radius: string;
+    shadow_style: string;
+    spacing_scale: string;
+  };
+  component_tree: string[];
+  interaction_plan: string[];
+  state_design: {
+    empty: string;
+    loading: string;
+    error: string;
+    success: string;
+  };
+}
+
+export interface AppVersion {
+  id: string;
+  app_id: string;
+  label: string;
+  source: "generate" | "refine" | "restore";
+  created_at: string;
+}
+
 export interface GenerateResult {
   id: string;
   short_id: string;
@@ -66,6 +115,10 @@ export interface GenerateResult {
   description: string;
   spec: AppSpec;
   generated_code?: string;
+  pipeline_run_id?: string;
+  quality_score?: number;
+  quality_breakdown?: QualityBreakdown;
+  latest_pipeline_summary?: string;
   shareUrl: string;
 }
 

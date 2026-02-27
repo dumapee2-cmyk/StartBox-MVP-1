@@ -1,14 +1,6 @@
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useRecentApps } from '../hooks/useRecentApps';
-
-const CATEGORIES = [
-  { id: 'all', label: 'All Apps' },
-  { id: 'productivity', label: 'Productivity' },
-  { id: 'analysis', label: 'Business Tools' },
-  { id: 'content', label: 'Content' },
-  { id: 'lifestyle', label: 'Lifestyle' },
-];
+import { StartBoxLogo } from '../components/StartBoxLogo';
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -21,54 +13,24 @@ function timeAgo(dateStr: string): string {
 
 export function GalleryPage() {
   const { apps, loading, error } = useRecentApps();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [activeCategory, setActiveCategory] = useState('all');
-
-  const filteredApps = apps.filter((app) => {
-    const matchesSearch = app.name.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesSearch;
-  });
 
   return (
     <div className="gallery-page">
-      <header className="full-app-topbar">
-        <Link to="/" className="topbar-logo">
-          <div className="topbar-logo-mark">S</div>
-          <span className="topbar-logo-text">StartBox</span>
-          <span className="topbar-badge">Beta</span>
+      <header className="gallery-header">
+        <Link to="/" style={{ textDecoration: 'none' }}>
+          <StartBoxLogo size="sm" />
         </Link>
-        <div className="topbar-actions">
+        <div className="gallery-header-right">
           <Link to="/" className="btn btn-primary btn-sm">
-            New Project
+            + Build an App
           </Link>
         </div>
       </header>
 
       <div className="gallery-content">
         <div className="gallery-hero">
-          <h1>App Templates</h1>
-          <p>Explore a curated collection of apps built with StartBox. Clone any project and make it your own.</p>
-        </div>
-
-        <div className="gallery-filters">
-          <input
-            className="gallery-search"
-            type="text"
-            placeholder="Search apps..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-          <div className="gallery-categories">
-            {CATEGORIES.map((cat) => (
-              <button
-                key={cat.id}
-                className={`gallery-cat-btn${activeCategory === cat.id ? ' active' : ''}`}
-                onClick={() => setActiveCategory(cat.id)}
-              >
-                {cat.label}
-              </button>
-            ))}
-          </div>
+          <h1>App Gallery</h1>
+          <p>Explore AI apps built with StartBox. Clone any app and make it your own.</p>
         </div>
 
         {loading && (
@@ -82,17 +44,17 @@ export function GalleryPage() {
           <div className="page-error">{error}</div>
         )}
 
-        {!loading && !error && filteredApps.length === 0 && (
+        {!loading && !error && apps.length === 0 && (
           <div className="gallery-empty">
-            <h3>No apps found</h3>
-            <p>{searchQuery ? 'Try a different search term.' : 'Create your first project to get started.'}</p>
-            <Link to="/" className="btn btn-primary">New Project</Link>
+            <h3>No apps yet</h3>
+            <p>Be the first to build an AI app with StartBox.</p>
+            <Link to="/" className="btn btn-primary">Build an App</Link>
           </div>
         )}
 
-        {!loading && filteredApps.length > 0 && (
+        {!loading && apps.length > 0 && (
           <div className="gallery-grid">
-            {filteredApps.map((app) => (
+            {apps.map((app) => (
               <Link
                 key={app.id}
                 to={`/app/${app.id}`}
@@ -102,7 +64,7 @@ export function GalleryPage() {
                 <div className="gallery-card-top">
                   <div
                     className="gallery-card-color-bar"
-                    style={{ background: app.theme_color ?? '#6366f1' }}
+                    style={{ background: app.theme_color ?? '#0071e3' }}
                   />
                   <div className="gallery-card-icon">
                     {app.name.charAt(0).toUpperCase()}
@@ -121,7 +83,7 @@ export function GalleryPage() {
                   </div>
                 </div>
                 <div className="gallery-card-footer">
-                  <span className="gallery-card-cta">Open Project</span>
+                  <span className="gallery-card-cta">Open App →</span>
                 </div>
               </Link>
             ))}

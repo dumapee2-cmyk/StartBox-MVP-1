@@ -1,5 +1,12 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { randomUUID } from "node:crypto";
 import type { ReasonedIntent } from "./reasoner.js";
+import type { AppContextBrief } from "./contextResearch.js";
+import { scoreGeneratedCode } from "./qualityScorer.js";
+import { recordSpend } from "./costTracker.js";
+import type { ProgressCallback } from "./progressEmitter.js";
+import type { PipelineRunArtifact, QualityBreakdown } from "../types/index.js";
+
 
 export interface CodeGenerationResult {
   generated_code: string;
@@ -8,159 +15,117 @@ export interface CodeGenerationResult {
   primary_color: string;
   icon: string;
   pages: string[];
+  quality_score: number;
+  quality_breakdown: QualityBreakdown;
+  pipeline_artifact: PipelineRunArtifact;
 }
 
-const CODE_GEN_SYSTEM_PROMPT = `You are an elite React developer at a top-tier product studio. Generate a COMPLETE, SINGLE-FILE React application that would earn $29/mo in production.
+/* ------------------------------------------------------------------ */
+/*  Dynamic system prompt — only includes layout-relevant sections     */
+/* ------------------------------------------------------------------ */
 
-ABSOLUTE RULES:
-1. NO import statements — use global destructuring only:
-   const { useState, useEffect, useRef, useCallback, useMemo } = React;
-2. Icons: const { Search, Star, ArrowRight, Zap, ChevronRight, Upload, Download, Copy, Check, X, Plus, Minus, BarChart2, FileText, Settings, Home, History, RefreshCw, Loader2 } = window.LucideReact || {};
-   Always add a fallback: const IconComponent = window.LucideReact?.IconName || null;
-   Render icons with: {IconComponent ? React.createElement(IconComponent, { size: 20 }) : '→'}
-3. Tailwind CSS classes ONLY — no style attributes except for dynamic colors via style prop
-4. AI calls: const result = await window.__sbAI(SYSTEM_PROMPT_STRING, userMessage);
-5. Multiple pages via state: const [page, setPage] = useState('home');
-6. LAST LINE MUST BE: ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
-7. Include real loading spinners, error boundaries, optimistic UI
-8. Every button and nav item MUST be wired up and functional
-9. Include realistic demo data visible on FIRST LOAD (not empty states)
-10. App must look like a polished SaaS product
+const LAYOUT_GUIDES: Record<string, string> = {
+  analyzer: `APP LAYOUT — ANALYZER (food scanner, resume checker, code reviewer):
+- Home: glass hero -> glass input card (p-5 rounded-2xl) -> full-width CTA (h-12)
+- Results: ScoreRing (SVG with glow), breakdown cards, metric rows
+- History: vertical glass card list with timestamps`,
+  generator: `APP LAYOUT — GENERATOR (email writer, caption gen, story creator):
+- Home: hero -> glass input card (textarea + option pills) -> generate CTA
+- Output: glass result card with copy button, tab switcher for variants`,
+  tool: `APP LAYOUT — TOOL (calculator, converter, estimator):
+- Single screen: hero -> glass input card -> live result card below
+- Result: large glowing number/value centered`,
+  dashboard: `APP LAYOUT — DASHBOARD (tracker, monitor, portfolio):
+- Home: stat grid (sm:grid-cols-2 lg:grid-cols-3) -> activity feed
+- Stat card: glass card, icon with glow, big number, label`,
+  planner: `APP LAYOUT — PLANNER (study planner, meal planner, roadmap):
+- Home: progress glass card (day X of Y, progress bar with glow) -> today's items
+- Each item: glass card with colored left accent border`,
+};
 
-STRUCTURE — determined by layout_archetype in the user message:
+const DEMO_HINTS: Record<string, string> = {
+  analyzer: 'Pre-populated result with score 87/100, breakdown cards, 3 history entries.',
+  generator: 'Show 2 pre-generated variants on load. One fully visible.',
+  tool: 'Pre-filled input with calculated result shown immediately.',
+  dashboard: '5+ stat cards with realistic numbers, 3-5 recent activity items.',
+  planner: '"Day 2 of 14" progress, color-coded items, 3+ plan entries.',
+};
 
-IF layout_archetype === "tabbed_tool":
-  - Sticky header: Logo/icon, app name, horizontal tab navigation, optional settings gear
-  - 2-4 tab pages: main tool, results/history, settings
-  - Each tab: form → AI trigger → results display
-  - History stored in localStorage as clickable cards
-  - Reference: Cal AI, MyFitnessPal, Grammarly
+function buildCodeGenSystemPrompt(layout: string): string {
+  const layoutGuide = LAYOUT_GUIDES[layout] ?? LAYOUT_GUIDES.analyzer;
+  const demoHint = DEMO_HINTS[layout] ?? DEMO_HINTS.analyzer;
 
-IF layout_archetype === "sidebar_dashboard":
-  - Left sidebar (w-64, bg-gray-900 or bg-slate-800): app icon/name at top, nav links with icons, settings at bottom
-  - Main content area: metric cards row at top (3-4 stats), then primary content below
-  - Active nav item highlighted with accent color in sidebar
-  - No horizontal tab bar — all navigation is in the sidebar
-  - Reference: Notion, Linear, Stripe Dashboard, Vercel Dashboard
+  const scoreRing = layout === 'analyzer' ? `
+ScoreRing component (use for score displays):
+function ScoreRing({score,size=120,color}) {
+  const r=(size/2)-10,c=2*Math.PI*r,offset=c-(score/100)*c;
+  return React.createElement('div',{className:'flex flex-col items-center',style:{animation:'scaleIn 0.5s ease-out'}},
+    React.createElement('svg',{width:size,height:size,viewBox:'0 0 '+size+' '+size,style:{filter:'drop-shadow(0 0 8px '+color+'40)'}},
+      React.createElement('circle',{cx:size/2,cy:size/2,r,fill:'none',stroke:'rgba(255,255,255,0.06)',strokeWidth:8}),
+      React.createElement('circle',{cx:size/2,cy:size/2,r,fill:'none',stroke:color,strokeWidth:8,strokeLinecap:'round',strokeDasharray:c,strokeDashoffset:offset,style:{animation:'ringFill 1s ease-out forwards','--ring-circumference':c,'--ring-offset':offset},transform:'rotate(-90 '+size/2+' '+size/2+')'})
+    ),
+    React.createElement('div',{className:'text-3xl font-bold mt-2 text-white',style:{animation:'countUp 0.6s ease-out 0.3s both'}},score),
+    React.createElement('div',{className:'text-xs text-gray-500'},'/100')
+  );
+}` : '';
 
-IF layout_archetype === "card_grid":
-  - Hero section at top: headline, subtitle, search/filter bar
-  - Category filter tabs or pills above the grid
-  - Masonry or uniform grid of cards (3-4 columns desktop, 1 mobile)
-  - Cards are interactive: click to expand, flip, or show detail modal
-  - Each card has: title, preview content, category tag, action button
-  - Reference: Pinterest, Quizlet, Dribbble, Product Hunt
+  return `You are a world-class UI engineer building premium dark-glass web apps. Think Cluely, Perplexity, Linear, Raycast — apps worth $30/month. Every app must look like a real shipping product unique to its domain.
 
-IF layout_archetype === "split_pane":
-  - Thin top bar: app name + settings icon
-  - Two columns (50/50 or 40/60): left = input panel with form, right = output/preview panel
-  - Output updates live on button click (or debounced typing)
-  - Clear visual divider between panes (border or subtle background change)
-  - No tab navigation — everything visible at once
-  - Reference: CodePen, Google Translate, Markdown editors
+RULES:
+1. NO imports — destructure: const { useState, useEffect, useRef, useCallback, useMemo } = React;
+2. Icons from window.LucideReact — destructure needed icons:
+   const { Search, Star, Zap, ArrowRight, Upload, Download, Copy, Check, X, Plus, Minus, BarChart2, FileText, Settings, Home, History, RefreshCw, Loader2, ChevronDown, ExternalLink, Trash2, Clock, Target, TrendingUp, Shield, Heart, Sparkles, Eye, Bell, Calendar, Users, Filter, Info, CheckCircle, ArrowDown } = window.LucideReact || {};
+   Any Lucide icon is available — add more to destructuring as needed.
+   Render: React.createElement(Icon, { size: 20, strokeWidth: 1.5 })
+   SafeIcon: const SafeIcon = ({icon:Icon,size=20,...p}) => Icon ? React.createElement(Icon,{size,strokeWidth:1.5,...p}) : null;
+3. Tailwind CSS only — style attr only for dynamic values
+4. AI: const result = await window.__sbAI(SYSTEM_PROMPT, userMessage);
+5. Pages: const [page, setPage] = useState('home');
+6. LAST LINE: ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
 
-IF layout_archetype === "wizard_stepper":
-  - Progress indicator at top: numbered step dots or labeled progress bar
-  - One step visible at a time, content centered in viewport (max-w-xl mx-auto)
-  - Back/Next buttons fixed at bottom of each step
-  - Steps: 2-4 input steps collecting different info, then final step shows AI results
-  - Final step has: restart button, save/copy result, rich formatted output
-  - Reference: TurboTax, Typeform, onboarding flows
+ZERO EMOJI anywhere — use Lucide icons or text characters only.
 
-IF layout_archetype === "chat_interface":
-  - Message list taking ~80% of height, auto-scrolls to bottom
-  - Input bar fixed at bottom: textarea + send button, optional attachments
-  - Optional collapsible right sidebar (w-72) for context, settings, or saved items
-  - User messages: right-aligned, primary color bg, white text
-  - AI messages: left-aligned, gray bg, with structured formatting
-  - Typing indicator during AI processing
-  - Reference: ChatGPT, Claude, Intercom
+DARK GLASS DESIGN:
+BG: bg-[#0a0a0f]. NO light/white backgrounds.
+Glass: bg-white/[0.04] backdrop-blur-xl border border-white/[0.06] rounded-2xl | Hover: bg-white/[0.08] border-white/[0.12] | Elevated: bg-white/[0.06] shadow-[0_8px_32px_rgba(0,0,0,0.3),inset_0_1px_0_rgba(255,255,255,0.06)]
+Text: white/90 primary, gray-400 secondary, gray-500 muted. NO dark text.
+Inputs: bg-white/[0.04] border-white/[0.08] rounded-xl text-white placeholder:text-gray-500 focus:border-blue-500/50 focus:ring-2 focus:ring-blue-500/20 px-4 py-3.5
+Buttons: Primary h-12 rounded-xl font-semibold glow | Secondary bg-white/[0.06] border-white/[0.08] | Ghost text-gray-400 hover:text-white | Pill px-4 py-2 rounded-full bg-white/[0.06] text-sm
+Accents: primaryColor for CTAs, active states. Glow: box-shadow 0 0 20px rgba(COLOR,0.3).
 
-IF layout_archetype === "kanban_board":
-  - Top bar: app name, search, add new item button
-  - Horizontal scrolling board with 3-5 columns
-  - Each column: header with count, list of cards, "Add card" button at bottom
-  - Cards: title + brief details + category/priority tag + click to show detail modal
-  - Detail modal: full info, edit fields, move between columns
-  - Reference: Trello, Linear, Notion Board view
+TOP NAV (sticky, NOT bottom/sidebar):
+sticky top-0 z-50 bg-[#0a0a0f]/80 backdrop-blur-xl border-b border-white/[0.06] h-14
+Left: icon (w-8 h-8 rounded-lg bg primaryColor/20) + name. Right: tabs. Active: text-white bg-white/[0.06].
 
-IF layout_archetype === "landing_hero":
-  - Large hero section: big headline (text-4xl+), subtitle, prominent CTA button with primary color
-  - Features section below: 2-3 column grid of feature cards with icons
-  - Single scrolling page, NO tab navigation, NO sidebar
-  - CTA triggers the main AI action; results appear in-place below the hero
-  - After results: formatted display with copy button, "Try again" button
-  - Reference: Stripe, Vercel, Linear marketing pages
+CONTENT: max-w-4xl mx-auto px-4 py-6. Grid: grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4
 
-CRITICAL: The layout_archetype determines the ENTIRE page structure. Do NOT add tab navigation to a sidebar_dashboard. Do NOT add a sidebar to a tabbed_tool. Do NOT add horizontal tabs to a split_pane. Follow the archetype strictly.
+ANIMATIONS (pre-loaded — just use):
+fadeIn, slideUp, scaleIn, shimmer, countUp, ringFill, slideIn, bounceIn, pulse
+Cards: style={{ animation: 'slideUp 0.4s ease-out '+(i*0.08)+'s both' }}
 
-AI INTEGRATION PATTERNS (pick the best for the domain):
-- Analyzer: User inputs → "Analyzing..." spinner → Structured results with score/grade/breakdown
-- Generator: User inputs → "Generating..." → Long-form content display with copy button
-- Planner: User inputs goals → "Planning..." → Step-by-step action plan
-- Advisor: Chat-like interface → AI responds with recommendations
+HERO: Glass card with radial gradient from primaryColor. Domain-appropriate accent.
 
-AI RESULT DISPLAY:
-Always parse AI response for structure. The AI_SYSTEM_PROMPT must instruct Claude to respond in a parseable format:
-- For scores: "**Score: 87/100**\\n**Grade: B+**\\n## Category\\n**Key:** Value"
-- For lists: "1. Item\\n2. Item"
-- For content: Rich markdown with ## headers and **bold** key points
+${layoutGuide}
 
-STYLING REQUIREMENTS (use these exact patterns):
-- Primary color: use the provided hex via inline style on key accent elements, Tailwind arbitrary values for backgrounds
-- Dark sidebar or top nav: bg-gray-900 or bg-slate-800
-- Cards: bg-white rounded-xl shadow-sm border border-gray-100
-- Inputs: w-full px-4 py-3 rounded-lg border border-gray-200 focus:outline-none focus:ring-2
-- Primary button: px-6 py-3 rounded-lg text-white font-semibold (bg via inline style with primary color)
-- Loading: flex items-center gap-2 with animate-spin div
-- Score ring: SVG circle with strokeDasharray/strokeDashoffset for animated fill
+COMPONENTS:
+${scoreRing}
+- History: localStorage with STORAGE_KEY. Save after AI results. Glass card list.
+- Copy: navigator.clipboard.writeText(text). "Copied" state 2s.
+- Errors: rounded-xl p-4 bg-red-500/10 border-red-500/20 text-red-400
+- Skeleton: shimmer bars (linear-gradient 90deg white/4>8>4, bgSize 200%, animation shimmer 1.5s infinite)
 
-HISTORY FEATURE (for archetypes that support it — tabbed_tool, sidebar_dashboard, chat_interface):
-Store results in localStorage as JSON array. Load on mount. Display as clickable cards or list items.
+CODE EFFICIENCY (IMPORTANT — reduces cost):
+- Extract repeated Tailwind strings into const: const card = 'rounded-2xl p-5 bg-white/[0.04] border border-white/[0.06]';
+- Create small helpers for repeated JSX patterns. DRY > verbose.
+- Minimal comments — code should be self-documenting.
+- Prefer concise createElement calls. Every token counts.
 
-localStorage pattern:
-const STORAGE_KEY = 'APP_NAME_history';
-const [history, setHistory] = useState(() => {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
-  catch { return []; }
-});
+NO: emoji, light backgrounds, bottom/sidebar nav, opaque surfaces, dark text on dark bg, spinners (use skeletons), empty states, "Powered by AI", tiny targets (<44px).
 
-COPY TO CLIPBOARD:
-Always include copy buttons for generated content:
-const [copied, setCopied] = useState(false);
-async function handleCopy(text) {
-  await navigator.clipboard.writeText(text).catch(() => {});
-  setCopied(true);
-  setTimeout(() => setCopied(false), 2000);
+DEMO DATA: Realistic pre-populated data on first load. ${demoHint}
+
+QUALITY: Would a Linear/Perplexity designer approve? Glass depth, glows, smooth animations, consistent spacing.`;
 }
-
-ERROR HANDLING:
-Always wrap AI calls in try/catch. Show friendly error messages in a styled error banner.
-
-REFERENCE IMPLEMENTATIONS (archetype → example):
-1. Food Scanner (tabbed_tool): Tab nav → photo/text input → Macro score ring + breakdown
-2. Resume Checker (split_pane): Left: paste resume + job desc. Right: live ATS score + keyword gaps
-3. Email Writer (split_pane): Left: bullet points + tone. Right: live email preview with copy
-4. Business Validator (wizard_stepper): Step 1: idea desc → Step 2: target market → Step 3: AI viability report
-5. Caption Generator (card_grid): Hero + platform filter → Grid of caption variants as cards
-6. Study Planner (sidebar_dashboard): Sidebar with subjects → Main: calendar view + study schedule
-7. Pricing Calculator (tabbed_tool): Tab 1: inputs form → Tab 2: competitive analysis
-8. Code Reviewer (split_pane): Left: paste code. Right: quality score + annotated feedback
-9. Project Manager (kanban_board): Columns: Backlog / In Progress / Review / Done
-10. AI Tutor (chat_interface): Message thread + side panel with topic outline
-
-FINAL CHECKLIST before outputting:
-✓ No import statements
-✓ Uses window.LucideReact with fallback
-✓ Layout matches the specified layout_archetype
-✓ No tab navigation in non-tabbed layouts
-✓ No sidebar in non-sidebar layouts
-✓ AI call uses window.__sbAI
-✓ Primary color applied to CTAs and accents
-✓ Demo data visible on first load
-✓ ReactDOM.createRoot at bottom
-✓ Error handling on AI calls
-✓ Mobile responsive (flex-col on mobile, side-by-side on md+)`;
 
 const codeGenToolSchema = {
   type: "object" as const,
@@ -168,7 +133,7 @@ const codeGenToolSchema = {
   properties: {
     generated_code: {
       type: "string",
-      description: "The complete single-file React JSX application code",
+      description: "The complete single-file React JSX application code. ZERO emoji characters allowed.",
     },
     app_name: {
       type: "string",
@@ -184,7 +149,7 @@ const codeGenToolSchema = {
     },
     icon: {
       type: "string",
-      description: "Single emoji representing the app",
+      description: "Lucide React icon name in PascalCase, e.g. 'Utensils', 'FileText', 'Zap'",
     },
     pages: {
       type: "array",
@@ -195,81 +160,199 @@ const codeGenToolSchema = {
   required: ["generated_code", "app_name", "tagline", "primary_color", "icon", "pages"],
 };
 
-export async function generateReactCode(
-  intent: ReasonedIntent,
-  originalPrompt: string,
-  model: "sonnet" | "opus" = "sonnet",
+const QUALITY_GATE_SCORE = 78;
+
+
+function cleanGeneratedCode(rawCode: string): string {
+  return (rawCode ?? "")
+    .replace(/^```(?:jsx?|tsx?|javascript)?\n?/m, "")
+    .replace(/\n?```$/m, "")
+    .trim();
+}
+
+async function runToolCodeGeneration(
+  client: Anthropic,
+  modelId: string,
+  systemPrompt: string,
+  userMessage: string,
+  onProgress?: ProgressCallback,
 ): Promise<CodeGenerationResult | null> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return null;
+  const timeoutMs = Number(process.env.STARTBOX_CODEGEN_TIMEOUT_MS ?? 180000);
 
-  const client = new Anthropic({ apiKey });
-
-  const modelId =
-    model === "opus" ? "claude-opus-4-6" : "claude-sonnet-4-6";
-
-  const userMessage = [
-    `Build a complete, production-ready React app for this product:`,
-    ``,
-    `User prompt: "${originalPrompt}"`,
-    `App concept: ${intent.primary_goal}`,
-    `Domain: ${intent.domain}`,
-    `Design style: ${intent.design_philosophy}`,
-    `Layout archetype: ${intent.layout_archetype}`,
-    `Reference app: ${intent.reference_app ?? "none"}`,
-    `App name: ${intent.app_name_hint}`,
-    `Primary color: ${intent.primary_color}`,
-    `Theme: ${intent.theme_style}`,
-    `Icon: ${intent.app_icon}`,
-    `Pages needed: ${intent.nav_tabs.map((t) => t.label).join(", ")}`,
-    `Output style: ${intent.output_format_hint}`,
-    ``,
-    `Generate a complete single-file React app. The primary color is ${intent.primary_color} — use it for CTAs, active states, score rings, and accents. Include real demo data visible on first load. Make it look like a $29/mo SaaS product.`,
-    ``,
-    `The AI system prompt inside the app MUST produce structured output that matches the output style (${intent.output_format_hint}). Design the prompt carefully so users get rich, parseable results.`,
-  ].join("\n");
+  // Use streaming with AbortController so timeouts actually cancel the request
+  const controller = new AbortController();
+  const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await client.messages.create({
+    const stream = client.messages.stream({
       model: modelId,
-      max_tokens: 16000,
-      system: CODE_GEN_SYSTEM_PROMPT,
+      max_tokens: 12000,
+      system: [
+        {
+          type: "text" as const,
+          text: systemPrompt,
+          cache_control: { type: "ephemeral" as const },
+        },
+      ],
       messages: [{ role: "user", content: userMessage }],
       tools: [
         {
           name: "generate_react_app",
           description:
-            "Generate a complete, single-file React application with all features",
+            "Generate a complete, single-file React application with all features. ZERO emoji allowed.",
           input_schema: codeGenToolSchema,
+          cache_control: { type: "ephemeral" as const },
         },
       ],
       tool_choice: { type: "tool", name: "generate_react_app" },
+    }, { signal: controller.signal });
+
+    // Hook into streaming to detect components being written in real-time
+    const detectedComponents = new Set<string>();
+    const componentPattern = /function\s+([A-Z][A-Za-z0-9]+)\s*\(/g;
+
+    stream.on('inputJson', (_delta: string, snapshot: unknown) => {
+      if (!onProgress) return;
+      const snap = snapshot as Record<string, unknown>;
+      const code = typeof snap?.generated_code === 'string' ? snap.generated_code : '';
+      if (!code) return;
+
+      componentPattern.lastIndex = 0;
+      let match: RegExpExecArray | null;
+      while ((match = componentPattern.exec(code)) !== null) {
+        const name = match[1];
+        if (!detectedComponents.has(name)) {
+          detectedComponents.add(name);
+          onProgress({ type: 'writing', message: `Wrote ${name}`, data: { component: name } });
+        }
+      }
     });
+
+    const response = await stream.finalMessage();
+
+    // Emit "created" for all detected components after stream completes
+    if (onProgress && detectedComponents.size > 0) {
+      onProgress({ type: 'created', message: 'Created', data: { components: Array.from(detectedComponents) } });
+    }
+    clearTimeout(timeoutHandle);
+
+    const usage = response.usage as unknown as Record<string, number>;
+    const cacheRead = usage.cache_read_input_tokens ?? 0;
+    const cacheCreate = usage.cache_creation_input_tokens ?? 0;
+    const uncached = usage.input_tokens - cacheRead - cacheCreate;
+    // Sonnet pricing: $3/M input, $15/M output, cache write $3.75/M, cache read $0.30/M
+    const cost = ((uncached * 3 + cacheCreate * 3.75 + cacheRead * 0.30 + usage.output_tokens * 15) / 1_000_000);
+    console.log(`Code gen tokens — input: ${usage.input_tokens} (cached: ${cacheRead}, wrote: ${cacheCreate}), output: ${usage.output_tokens} (est cost: $${cost.toFixed(3)})`);
+    recordSpend(cost);
 
     if (response.stop_reason === "max_tokens") {
       console.warn("Code generation hit max_tokens limit — output may be truncated");
     }
 
     const toolUse = response.content.find((b) => b.type === "tool_use");
-    if (!toolUse || toolUse.type !== "tool_use") {
-      console.error("Code generation: no tool_use block in response. stop_reason:", response.stop_reason);
-      return null;
-    }
+    if (!toolUse || toolUse.type !== "tool_use") return null;
 
     const raw = toolUse.input as CodeGenerationResult;
-    // Strip markdown code fences if Claude wrapped the code despite being told not to
-    const cleanCode = (raw.generated_code ?? "")
-      .replace(/^```(?:jsx?|tsx?|javascript)?\n?/m, "")
-      .replace(/\n?```$/m, "")
-      .trim();
-
-    if (!cleanCode) {
-      console.error("Code generation: tool returned empty generated_code");
-      return null;
+    const cleanCode = cleanGeneratedCode(raw.generated_code ?? "");
+    if (!cleanCode) return null;
+    return { ...raw, generated_code: cleanCode };
+  } catch (e) {
+    clearTimeout(timeoutHandle);
+    if (controller.signal.aborted) {
+      throw new Error(`Code generation timed out after ${timeoutMs}ms`);
     }
+    throw e;
+  }
+}
 
-    const result: CodeGenerationResult = { ...raw, generated_code: cleanCode };
-    console.log(`Code generation success: ${result.app_name}, ${result.generated_code.length} chars`);
+export async function generateReactCode(
+  intent: ReasonedIntent,
+  originalPrompt: string,
+  model: "sonnet" | "opus" = "sonnet",
+  contextBrief?: AppContextBrief | null,
+  onProgress?: ProgressCallback,
+): Promise<CodeGenerationResult | null> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return null;
+
+  const client = new Anthropic({ apiKey, maxRetries: 0 });
+
+  // Sonnet for quality code generation + prompt caching to reduce costs
+  const modelId =
+    model === "opus" ? "claude-opus-4-6" : "claude-sonnet-4-6";
+
+  const primaryLayout = intent.nav_tabs[0]?.layout ?? 'analyzer';
+
+  // Build layout-specific system prompt (reduces input tokens ~40%)
+  const systemPrompt = buildCodeGenSystemPrompt(primaryLayout);
+
+  // Only include unique context fields not already captured in intent
+  const contextSection = contextBrief ? [
+    ``,
+    `--- CONTEXT ---`,
+    `Competitors: ${contextBrief.competitive_landscape.map(c => `${c.name} (${c.visual_signature})`).join('; ')}`,
+    `Visual motifs: ${contextBrief.design_references.visual_motifs.join(', ')}`,
+    `Field labels: ${JSON.stringify(contextBrief.domain_terminology.field_labels)}`,
+    `CTA verbs: ${contextBrief.domain_terminology.cta_verbs.join(', ')}`,
+    ...(contextBrief.ui_component_suggestions?.length ? [`UI patterns: ${contextBrief.ui_component_suggestions.join(', ')}`] : []),
+    `---`,
+  ].join('\n') : '';
+
+  const baseUserMessage = [
+    `Build a complete React app:`,
+    `Prompt: "${originalPrompt}"`,
+    `Concept: ${intent.primary_goal}`,
+    `Domain: ${intent.domain} | Design: ${intent.design_philosophy}`,
+    `Style: ${intent.visual_style_keywords?.join(", ") ?? "clean, modern"}`,
+    `User: ${intent.target_user ?? "general"} | Differentiator: ${intent.key_differentiator ?? "AI-powered"}`,
+    `Features: ${intent.premium_features?.join(", ") ?? "standard"}`,
+    ...(intent.reference_app ? [`Ref: ${intent.reference_app}`] : []),
+    `Name: ${intent.app_name_hint} | Color: ${intent.primary_color} | Icon: ${intent.app_icon}`,
+    `Pages: ${intent.nav_tabs.map((t) => `${t.label} (${t.icon})`).join(", ")}`,
+    `Output: ${intent.output_format_hint}`,
+    contextSection,
+    `Type: ${primaryLayout.toUpperCase()} — use the layout pattern from system instructions.`,
+    `AI system prompt inside app MUST produce structured output matching (${intent.output_format_hint}).`,
+  ].join("\n");
+
+  try {
+    const candidate = await runToolCodeGeneration(client, modelId, systemPrompt, baseUserMessage, onProgress);
+    if (!candidate) return null;
+
+    const evaluation = scoreGeneratedCode({
+      code: candidate.generated_code,
+      prompt: originalPrompt,
+      outputFormat: intent.output_format_hint,
+    });
+
+    const pipelineArtifact: PipelineRunArtifact = {
+      run_id: randomUUID(),
+      stages: [
+        "Research & Planning",
+        "Code Generation",
+        "Quality Scoring",
+        "Finalize",
+      ],
+      selected_candidate: "A",
+      candidates: [
+        {
+          id: "A",
+          quality_score: evaluation.quality_score,
+          quality_breakdown: evaluation.quality_breakdown,
+        },
+      ],
+      repaired: false,
+    };
+
+    const result: CodeGenerationResult = {
+      ...candidate,
+      quality_score: evaluation.quality_score,
+      quality_breakdown: evaluation.quality_breakdown,
+      pipeline_artifact: pipelineArtifact,
+    };
+    console.log(
+      `Code generation success: ${result.app_name}, ${result.generated_code.length} chars, score ${result.quality_score}`,
+    );
     return result;
   } catch (e) {
     console.error("Code generation failed:", e);

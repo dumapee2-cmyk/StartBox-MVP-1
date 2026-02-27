@@ -37,12 +37,12 @@ chatRouter.post("/:id/chat", chatRateLimiter, async (req, res) => {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return res.status(503).json({ message: "AI service unavailable" });
 
-  const client = new Anthropic({ apiKey });
+  const client = new Anthropic({ apiKey, maxRetries: 0 });
   const startTime = Date.now();
 
   try {
     const response = await client.messages.create({
-      model: "claude-sonnet-4-6",
+      model: "claude-haiku-4-5-20251001",
       max_tokens: 1500,
       system: body.system,
       messages: [{ role: "user", content: body.message }],

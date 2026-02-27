@@ -18,11 +18,15 @@ model App {
   generated_code  String?
   theme_color     String?
   tagline         String?
+  latest_quality_score    Int?
+  latest_pipeline_summary String?
   run_count       Int       @default(0)
   created_at      DateTime  @default(now())
   updated_at      DateTime  @updatedAt
 
   runs            AppRun[]
+  versions        AppVersion[]
+  pipeline_runs   PipelineRun[]
 
   @@index([short_id])
   @@index([created_at])
@@ -42,4 +46,35 @@ model AppRun {
 
   @@index([app_id, created_at])
   @@map("app_runs")
+}
+
+model AppVersion {
+  id             String   @id @default(uuid())
+  app_id         String
+  label          String
+  source         String
+  generated_code String
+  metadata       Json?
+  created_at     DateTime @default(now())
+
+  app            App      @relation(fields: [app_id], references: [id], onDelete: Cascade)
+
+  @@index([app_id, created_at])
+  @@map("app_versions")
+}
+
+model PipelineRun {
+  id                String   @id @default(uuid())
+  app_id            String
+  prompt            String
+  intent            Json
+  artifact          Json
+  quality_score     Int
+  quality_breakdown Json?
+  created_at        DateTime @default(now())
+
+  app               App      @relation(fields: [app_id], references: [id], onDelete: Cascade)
+
+  @@index([app_id, created_at])
+  @@map("pipeline_runs")
 }

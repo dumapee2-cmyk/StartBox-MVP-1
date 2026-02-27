@@ -74,9 +74,21 @@ export interface AppRecord {
   forked_from: string | null;
   generated_code?: string;
   theme_color?: string;
+  latest_quality_score?: number | null;
+  latest_pipeline_summary?: string | null;
   run_count: number;
   created_at: string;
   shareUrl: string;
+}
+
+export interface QualityBreakdown {
+  visual_hierarchy: number;
+  domain_specificity: number;
+  responsiveness: number;
+  interaction_richness: number;
+  component_completeness: number;
+  brand_cohesion: number;
+  output_format_compliance: number;
 }
 
 export interface GenerateResult {
@@ -87,6 +99,10 @@ export interface GenerateResult {
   description: string;
   spec: AppSpec;
   generated_code?: string;
+  pipeline_run_id?: string;
+  quality_score?: number;
+  quality_breakdown?: QualityBreakdown;
+  latest_pipeline_summary?: string;
   shareUrl: string;
 }
 
@@ -112,8 +128,83 @@ export interface RecentApp {
   created_at: string;
 }
 
+export interface AppVersion {
+  id: string;
+  app_id: string;
+  label: string;
+  source: 'generate' | 'refine' | 'restore';
+  created_at: string;
+}
+
+export interface PipelineRunArtifact {
+  id: string;
+  app_id: string;
+  prompt: string;
+  intent: unknown;
+  artifact: unknown;
+  quality_score: number;
+  quality_breakdown?: QualityBreakdown;
+  created_at: string;
+}
+
+// ── SSE streaming types ──
+
+export type ProgressEventType = 'status' | 'plan' | 'writing' | 'created' | 'quality' | 'done' | 'error';
+
+export interface ProgressEvent {
+  type: ProgressEventType;
+  message: string;
+  data?: Record<string, unknown>;
+}
+
+export function generateStream(
+  prompt: string,
+  model: 'auto' | 'sonnet' | 'opus' = 'auto',
+  onEvent: (event: ProgressEvent) => void,
+): { promise: Promise<void>; abort: () => void } {
+  const controller = new AbortController();
+
+  const promise = (async () => {
+    const res = await fetch('/api/generate', {
+      method: 'POST',
+      headers: { ...JSON_HEADERS, Accept: 'text/event-stream' },
+      body: JSON.stringify({ prompt, model }),
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.message ?? 'Generation failed');
+    }
+
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const event = JSON.parse(line.slice(6)) as ProgressEvent;
+            onEvent(event);
+          } catch { /* ignore parse errors */ }
+        }
+      }
+    }
+  })();
+
+  return { promise, abort: () => controller.abort() };
+}
+
 export const api = {
-  generate: (prompt: string, model: 'sonnet' | 'opus' = 'sonnet') =>
+  generate: (prompt: string, model: 'auto' | 'sonnet' | 'opus' = 'auto') =>
     fetch('/api/generate', {
       method: 'POST',
       body: JSON.stringify({ prompt, model }),
@@ -139,10 +230,19 @@ export const api = {
   forkApp: (id: string) =>
     fetch(`/api/apps/${id}/fork`, { method: 'POST' }).then((r) => parseResponse<GenerateResult>(r)),
 
-  refineApp: (id: string, instruction: string) =>
+  refineApp: (id: string, instruction: string, mode: 'build' | 'visual_edit' | 'discuss') =>
     fetch(`/api/apps/${id}/refine`, {
       method: 'POST',
-      body: JSON.stringify({ instruction }),
+      body: JSON.stringify({ instruction, mode }),
       headers: JSON_HEADERS,
-    }).then((r) => parseResponse<{ updated_code: string }>(r)),
+    }).then((r) => parseResponse<{ updated_code?: string; advisory?: string; mode: 'build' | 'visual_edit' | 'discuss' }>(r)),
+
+  getVersions: (id: string) =>
+    fetch(`/api/apps/${id}/versions`).then((r) => parseResponse<AppVersion[]>(r)),
+
+  restoreVersion: (id: string, versionId: string) =>
+    fetch(`/api/apps/${id}/versions/${versionId}/restore`, { method: 'POST' }).then((r) => parseResponse<{ restored: boolean }>(r)),
+
+  getPipelineRun: (id: string, runId: string) =>
+    fetch(`/api/apps/${id}/pipeline-runs/${runId}`).then((r) => parseResponse<PipelineRunArtifact>(r)),
 };

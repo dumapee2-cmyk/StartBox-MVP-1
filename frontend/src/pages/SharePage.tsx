@@ -4,6 +4,7 @@ import { useApp } from '../hooks/useApp';
 import { useRunApp } from '../hooks/useRunApp';
 import { AppShell } from '../components/AppShell';
 import { AppPreview } from '../components/AppPreview';
+import { StartBoxLogo } from '../components/StartBoxLogo';
 import { api } from '../lib/api';
 
 export function SharePage() {
@@ -47,13 +48,11 @@ export function SharePage() {
   return (
     <div className="full-app-page">
       <header className="full-app-topbar">
-        <Link to="/" className="topbar-logo">
-          <div className="topbar-logo-mark">S</div>
-          <span className="topbar-logo-text">StartBox</span>
-          <span className="topbar-badge">Beta</span>
+        <Link to="/" style={{ textDecoration: 'none' }}>
+          <StartBoxLogo size="sm" />
         </Link>
         <div className="topbar-actions">
-          <span className="topbar-badge">Shared</span>
+          <span className="topbar-badge">Shared App</span>
           <span className="topbar-app-name">{app.name}</span>
           {app.run_count > 0 && (
             <span className="run-count">{app.run_count} runs</span>
@@ -62,14 +61,14 @@ export function SharePage() {
             className="btn btn-secondary btn-sm"
             onClick={handleShare}
           >
-            {shareCopied ? 'Copied' : 'Share'}
+            {shareCopied ? 'Copied!' : 'Share'}
           </button>
           <button
             className="btn btn-secondary btn-sm"
             onClick={handleFork}
             disabled={forking}
           >
-            {forking ? 'Duplicating...' : 'Duplicate'}
+            {forking ? 'Cloning...' : 'Clone App'}
           </button>
         </div>
       </header>
