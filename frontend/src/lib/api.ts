@@ -203,6 +203,28 @@ export function generateStream(
   return { promise, abort: () => controller.abort() };
 }
 
+// ── Clarification ──
+
+export interface ClarifyQuestion {
+  question: string;
+  options: string[];
+}
+
+export interface ClarifyResult {
+  clear: boolean;
+  questions?: ClarifyQuestion[];
+}
+
+export async function clarifyPrompt(prompt: string): Promise<ClarifyResult> {
+  const res = await fetch('/api/clarify', {
+    method: 'POST',
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ prompt }),
+  });
+  if (!res.ok) return { clear: true }; // fail-open
+  return res.json();
+}
+
 export const api = {
   generate: (prompt: string, model: 'auto' | 'sonnet' | 'opus' = 'auto') =>
     fetch('/api/generate', {

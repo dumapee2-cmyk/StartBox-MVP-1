@@ -29,7 +29,7 @@ export function GalleryPage() {
 
       <div className="gallery-content">
         <div className="gallery-hero">
-          <h1>App Gallery</h1>
+          <h1 className="gallery-hero-gradient">App Gallery</h1>
           <p>Explore AI apps built with StartBox. Clone any app and make it your own.</p>
         </div>
 
@@ -64,7 +64,7 @@ export function GalleryPage() {
                 <div className="gallery-card-top">
                   <div
                     className="gallery-card-color-bar"
-                    style={{ background: app.theme_color ?? '#0071e3' }}
+                    style={{ background: app.theme_color ?? '#6366f1' }}
                   />
                   <div className="gallery-card-icon">
                     {app.name.charAt(0).toUpperCase()}

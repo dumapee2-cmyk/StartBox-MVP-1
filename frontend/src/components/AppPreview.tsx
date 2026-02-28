@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { forwardRef, useMemo } from 'react';
 
 interface AppPreviewProps {
   code: string;
@@ -7,6 +7,8 @@ interface AppPreviewProps {
 }
 
 function buildIframeHtml(code: string, appId: string): string {
+  // Encode the user code as base64 to avoid any HTML injection / </script> issues
+  const encodedCode = btoa(unescape(encodeURIComponent(code)));
   return `<!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
@@ -418,31 +420,156 @@ function buildIframeHtml(code: string, appId: string): string {
     };
   </script>
 
-  <script type="text/babel" data-presets="react,env">
-    ${code}
+  <script>
+    (function() {
+      var source = decodeURIComponent(escape(atob("${encodedCode}")));
+
+      function tryTranspile(code) {
+        return Babel.transform(code, {
+          presets: ['react', 'env'],
+          filename: 'app.jsx',
+        });
+      }
+
+      function balanceAndClose(code) {
+        var stack = [];
+        var inStr = false, strChar = '';
+        for (var i = 0; i < code.length; i++) {
+          var ch = code[i];
+          if (inStr) { if (ch === strChar && code[i-1] !== '\\\\') inStr = false; continue; }
+          if (ch === "'" || ch === '"' || ch === '\`') { inStr = true; strChar = ch; continue; }
+          if (ch === '(' || ch === '{' || ch === '[') stack.push(ch === '(' ? ')' : ch === '{' ? '}' : ']');
+          else if (ch === ')' || ch === '}' || ch === ']') { if (stack.length) stack.pop(); }
+        }
+        return code + stack.reverse().join('');
+      }
+
+      function repairCode(code, error) {
+        var msg = String(error.message || '');
+        var lineMatch = msg.match(/\\((\\d+):(\\d+)\\)/);
+        var errLine = lineMatch ? parseInt(lineMatch[1]) : -1;
+        var lines = code.split('\\n');
+
+        // Strategy 1: Find the broken function, remove its body, replace with stub
+        if (errLine > 10) {
+          // Walk backward from error to find the function start
+          var funcStart = -1;
+          for (var i = errLine - 1; i >= 0; i--) {
+            if (/^function\\s+[A-Z]/.test(lines[i].trim()) || /^(var|const|let)\\s+[A-Z]\\w*\\s*=\\s*function/.test(lines[i].trim())) {
+              funcStart = i;
+              break;
+            }
+          }
+          if (funcStart >= 0) {
+            // Find the function name
+            var fnMatch = lines[funcStart].match(/function\\s+([A-Z]\\w*)/);
+            if (!fnMatch) fnMatch = lines[funcStart].match(/(var|const|let)\\s+([A-Z]\\w*)/)
+            var fnName = fnMatch ? (fnMatch[2] || fnMatch[1]) : null;
+
+            if (fnName) {
+              // Find where the next top-level function starts (after the error)
+              var funcEnd = lines.length;
+              for (var j = errLine; j < lines.length; j++) {
+                if (j > funcStart && (/^function\\s+/.test(lines[j].trim()) || /^(var|const|let)\\s+[A-Z]\\w*\\s*=\\s*function/.test(lines[j].trim()))) {
+                  funcEnd = j;
+                  break;
+                }
+              }
+              // Replace broken function with a stub that returns a placeholder
+              var before = lines.slice(0, funcStart).join('\\n');
+              var stub = 'function ' + fnName + '(){return h("div",{className:"p-8 text-center text-zinc-500"},"Component loading...");}';
+              var after = lines.slice(funcEnd).join('\\n');
+              var patched = before + '\\n' + stub + '\\n' + after;
+              try { return tryTranspile(patched); } catch(e) { /* continue */ }
+            }
+          }
+        }
+
+        // Strategy 2: Truncate at error line, close brackets, add render
+        if (errLine > 10) {
+          // Keep everything before the error line
+          var kept = lines.slice(0, errLine - 1).join('\\n');
+          kept = balanceAndClose(kept);
+          // Check if render call exists already
+          if (!/ReactDOM\\.createRoot/.test(kept)) {
+            // Find the App function name
+            var appMatch = code.match(/function\\s+(App)\\s*\\(/);
+            if (appMatch) {
+              kept += "\\nReactDOM.createRoot(document.getElementById('root')).render(h(App));";
+            }
+          }
+          try { return tryTranspile(kept); } catch(e) { /* continue */ }
+        }
+
+        // Strategy 3: Extract everything up to the last ReactDOM.createRoot line
+        for (var k = lines.length - 1; k >= 0; k--) {
+          if (/ReactDOM\\.createRoot/.test(lines[k])) {
+            var upToRender = lines.slice(0, k + 1).join('\\n');
+            upToRender = balanceAndClose(upToRender);
+            if (!/;\\s*$/.test(upToRender.trim())) upToRender += ';';
+            try { return tryTranspile(upToRender); } catch(e) { /* continue */ }
+            break;
+          }
+        }
+
+        // Strategy 4: Global bracket balancing
+        var balanced = balanceAndClose(code);
+        if (balanced !== code) {
+          try { return tryTranspile(balanced); } catch(e) { /* continue */ }
+        }
+
+        return null;
+      }
+
+      var transpiled;
+      try {
+        transpiled = tryTranspile(source);
+      } catch(e) {
+        // Attempt auto-repair
+        transpiled = repairCode(source, e);
+        if (!transpiled) {
+          document.getElementById('root').innerHTML =
+            '<div class="sb-error"><h2>Build Error</h2><pre>' +
+            String(e.message || e) + '</pre></div>';
+          return;
+        }
+      }
+      try {
+        var fn = new Function(transpiled.code);
+        fn();
+      } catch(e) {
+        document.getElementById('root').innerHTML =
+          '<div class="sb-error"><h2>App Error</h2><pre>' +
+          String(e.message || e) + (e.stack ? '\\n' + e.stack.split('\\n').slice(0,3).join('\\n') : '') +
+          '</pre></div>';
+      }
+    })();
   </script>
 </body>
 </html>`;
 }
 
-export function AppPreview({ code, appId, height = '100%' }: AppPreviewProps) {
-  const iframeKey = useMemo(() => `${appId}:${code}`, [appId, code]);
+export const AppPreview = forwardRef<HTMLIFrameElement, AppPreviewProps>(
+  function AppPreview({ code, appId, height = '100%' }, ref) {
+    const iframeKey = useMemo(() => `${appId}:${code}`, [appId, code]);
 
-  const srcDoc = buildIframeHtml(code, appId);
+    const srcDoc = buildIframeHtml(code, appId);
 
-  return (
-    <iframe
-      key={iframeKey}
-      srcDoc={srcDoc}
-      sandbox="allow-scripts allow-forms allow-same-origin allow-popups"
-      style={{
-        width: '100%',
-        height,
-        border: 'none',
-        display: 'block',
-        background: '#09090b',
-      }}
-      title="App Preview"
-    />
-  );
-}
+    return (
+      <iframe
+        ref={ref}
+        key={iframeKey}
+        srcDoc={srcDoc}
+        sandbox="allow-scripts allow-forms allow-same-origin allow-popups"
+        style={{
+          width: '100%',
+          height,
+          border: 'none',
+          display: 'block',
+          background: '#09090b',
+        }}
+        title="App Preview"
+      />
+    );
+  }
+);

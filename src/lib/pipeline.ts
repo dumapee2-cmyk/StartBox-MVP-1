@@ -82,7 +82,7 @@ export async function runGenerationPipeline(
     theme_style: "light",
     app_icon: "Zap",
     output_format_hint: "markdown",
-    narrative: `I'll build an AI-powered tool based on your request: "${prompt.slice(0, 100)}".`,
+    narrative: `A custom-built tool based on your idea: "${prompt.slice(0, 100)}".`,
     feature_details: [
       { name: "AI analysis", description: "Intelligent analysis powered by AI" },
       { name: "Instant results", description: "Get results in seconds" },

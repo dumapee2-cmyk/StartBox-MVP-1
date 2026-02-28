@@ -95,7 +95,7 @@ QUALITY STANDARD:
 This app must feel like a COMMERCIAL PRODUCT someone would pay $29/month for. All field labels must be domain-specific. No generic placeholders. No chatbox interfaces. Every design choice should be informed by what real products in this space look like.
 
 NARRATIVE FIELD:
-Write a 1-2 sentence "narrative" in first person ("I'll create...") describing what you're about to build and WHY it's useful. Be specific about the domain and value proposition. Example: "I'll create a smart clipboard manager that stores, organizes, and makes your clipboard history searchable and easily accessible."
+Write a 1-2 sentence "narrative" as a product description (NOT first person — no "I'll" or "I will") describing what's being built and WHY it's useful. Be specific about the domain and value proposition. Example: "A smart clipboard manager that stores, organizes, and makes your clipboard history searchable and easily accessible."
 
 FEATURE DETAILS:
 For each item in premium_features, provide a matching entry in feature_details with a "name" (same as the feature) and a "description" (one sentence explaining what it does for the user). Example: { name: "Clipboard History", description: "Stores and organizes everything you copy for instant recall" }
@@ -153,7 +153,7 @@ const toolInputSchema = {
     output_format_hint: { type: "string", enum: ["markdown", "cards", "score_card", "report", "list", "plain"] },
     layout_blueprint: { type: "string", description: "Spatial layout pattern: 'centered-hero-input-results', 'split-form-output', 'centered-card-tool', 'grid-dashboard', or 'timeline-planner'" },
     animation_keywords: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 3, description: "Animation style words: e.g. ['smooth', 'subtle', 'precise'] or ['bouncy', 'playful', 'energetic']" },
-    narrative: { type: "string", description: "1-2 sentence first-person description of what you'll build: 'I'll create a smart clipboard manager that stores, organizes, and makes your clipboard history searchable.'" },
+    narrative: { type: "string", description: "1-2 sentence product description (NOT first-person): 'A smart clipboard manager that stores, organizes, and makes your clipboard history searchable.'" },
     feature_details: {
       type: "array",
       items: {

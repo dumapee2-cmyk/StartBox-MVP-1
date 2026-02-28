@@ -27,8 +27,8 @@ export function StartBoxLogo({ size = 'md', showText = true }: LogoProps) {
       >
         <defs>
           <linearGradient id="sb-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#0071e3" />
-            <stop offset="100%" stopColor="#5856d6" />
+            <stop offset="0%" stopColor="#6366f1" />
+            <stop offset="100%" stopColor="#a855f7" />
           </linearGradient>
         </defs>
         {/* Outer rounded box */}
@@ -65,10 +65,10 @@ export function StartBoxLogo({ size = 'md', showText = true }: LogoProps) {
       </svg>
       {showText && (
         <span
+          className="startbox-logo-text"
           style={{
             fontSize: s.font,
             fontWeight: 700,
-            color: '#1d1d1f',
             letterSpacing: '-0.3px',
             lineHeight: 1,
           }}

@@ -14,7 +14,7 @@ export async function generateFromPrompt(
   // Opus is only used if explicitly requested — never auto-selected
   const resolvedModel = model === "opus" ? "opus" : "sonnet";
 
-  onProgress?.({ type: "status", message: "Analyzing your idea..." });
+  onProgress?.({ type: "status", message: "Scaffolding project..." });
 
   // Step 1: Run reasoner pipeline (Haiku) to extract structured intent
   console.log("Starting reasoner pipeline...");
@@ -43,7 +43,7 @@ export async function generateFromPrompt(
     },
   });
 
-  onProgress?.({ type: "status", message: "Generating application code..." });
+  onProgress?.({ type: "status", message: "Compiling components..." });
 
   // Step 2: Generate real React code using the intent + context
   // onProgress is threaded through so code gen emits real-time "writing" events
@@ -84,7 +84,7 @@ export async function generateFromPrompt(
   await prisma.app.deleteMany();
 
   // Step 4: Store in DB
-  onProgress?.({ type: "status", message: "Saving your app..." });
+  onProgress?.({ type: "status", message: "Deploying to preview..." });
   const app = await prisma.app.create({
     data: {
       name: spec.name,

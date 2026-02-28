@@ -57,6 +57,14 @@ function buildCodeGenSystemPrompt(layout: string): string {
   return `You build premium dark-theme web apps. Quality bar: Linear, Raycast, Vercel dashboard.
 NO imports. NO JSX. All rendering via h(). Tailwind classes only. ZERO emoji anywhere.
 
+CRITICAL — CODE MUST BE SYNTACTICALLY VALID:
+- Every h() call must have balanced parentheses. Count your parens.
+- Every object literal must have balanced braces.
+- Every array must have balanced brackets.
+- End the file with: ReactDOM.createRoot(document.getElementById('root')).render(h(App));
+- Do NOT leave trailing commas before closing parens/brackets.
+- Before returning, mentally verify all brackets/parens are balanced.
+
 MANDATORY FIRST LINES (copy exactly, replace values):
 const h = React.createElement;
 const {useState,useEffect,useRef,useCallback,useMemo} = React;
@@ -301,24 +309,24 @@ async function runToolCodeGeneration(
     const componentPattern = /function\s+([A-Z][A-Za-z0-9]+)\s*\(/g;
     const constComponentPattern = /const\s+([A-Z][A-Za-z0-9]+)\s*=\s*(?:\(|function)/g;
 
-    // Character-count milestones — distributed across the generation timeline
+    // Character-count milestones — distributed across the build timeline
     const charMilestones: Array<{ threshold: number; message: string; fired: boolean }> = [
-      { threshold: 200, message: "Setting up the application core...", fired: false },
-      { threshold: 1500, message: "Building the component library...", fired: false },
-      { threshold: 4000, message: "Adding interactive features...", fired: false },
-      { threshold: 7000, message: "Implementing data management...", fired: false },
-      { threshold: 10000, message: "Polishing the interface...", fired: false },
-      { threshold: 13000, message: "Finalizing the application...", fired: false },
+      { threshold: 200, message: "Initializing project structure...", fired: false },
+      { threshold: 1500, message: "Compiling component modules...", fired: false },
+      { threshold: 4000, message: "Linking interactive elements...", fired: false },
+      { threshold: 7000, message: "Bundling data layer...", fired: false },
+      { threshold: 10000, message: "Optimizing render pipeline...", fired: false },
+      { threshold: 13000, message: "Running final build pass...", fired: false },
     ];
 
     // Pattern-based milestones — contextual events when specific code patterns appear
     const patternMilestones: Array<{ pattern: RegExp; message: string; fired: boolean }> = [
-      { pattern: /useState/, message: "Configuring state management...", fired: false },
-      { pattern: /LucideReact/, message: "Loading icon library...", fired: false },
-      { pattern: /__sbAI/, message: "Connecting AI capabilities...", fired: false },
-      { pattern: /useEffect/, message: "Adding lifecycle behavior...", fired: false },
-      { pattern: /localStorage|useStore/, message: "Setting up data persistence...", fired: false },
-      { pattern: /animation|animate|keyframes/i, message: "Adding smooth animations...", fired: false },
+      { pattern: /useState/, message: "Wiring up state hooks...", fired: false },
+      { pattern: /LucideReact/, message: "Bundling icon assets...", fired: false },
+      { pattern: /__sbAI/, message: "Mounting smart modules...", fired: false },
+      { pattern: /useEffect/, message: "Registering lifecycle hooks...", fired: false },
+      { pattern: /localStorage|useStore/, message: "Configuring local storage...", fired: false },
+      { pattern: /animation|animate|keyframes/i, message: "Compiling animations...", fired: false },
     ];
 
     stream.on('inputJson', (_delta: string, snapshot: unknown) => {
@@ -386,13 +394,13 @@ async function runToolCodeGeneration(
 
     if (response.stop_reason === "max_tokens") {
       console.warn("Code generation hit max_tokens limit — output may be truncated");
-      onProgress?.({ type: 'status', message: 'Output was truncated, extracting code...' });
+      onProgress?.({ type: 'status', message: 'Extracting build output...' });
     }
 
     const toolUse = response.content.find((b) => b.type === "tool_use");
     if (!toolUse || toolUse.type !== "tool_use") {
       console.error("No tool_use block in response. stop_reason:", response.stop_reason, "content types:", response.content.map(b => b.type));
-      onProgress?.({ type: 'status', message: 'Retrying code extraction...' });
+      onProgress?.({ type: 'status', message: 'Retrying build extraction...' });
       return null;
     }
 
@@ -460,11 +468,11 @@ export async function generateReactCode(
     const candidate = await runToolCodeGeneration(client, modelId, systemPrompt, baseUserMessage, onProgress);
     if (!candidate) {
       console.error("Code generation returned null — no usable output from API");
-      onProgress?.({ type: 'status', message: 'Code generation failed — retrying is recommended' });
+      onProgress?.({ type: 'status', message: 'Build failed — retrying is recommended' });
       return null;
     }
 
-    onProgress?.({ type: 'status', message: 'Evaluating code quality...' });
+    onProgress?.({ type: 'status', message: 'Running quality checks...' });
 
     const evaluation = scoreGeneratedCode({
       code: candidate.generated_code,
@@ -504,7 +512,7 @@ export async function generateReactCode(
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error("Code generation failed:", msg);
-    onProgress?.({ type: 'status', message: `Code generation error: ${msg.slice(0, 100)}` });
+    onProgress?.({ type: 'status', message: `Build error: ${msg.slice(0, 100)}` });
     return null;
   }
 }

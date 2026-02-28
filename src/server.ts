@@ -10,6 +10,7 @@ import { runRouter } from "./routes/run.js";
 import { shareRouter } from "./routes/share.js";
 import { chatRouter } from "./routes/chat.js";
 import { refineRouter } from "./routes/refine.js";
+import { clarifyRouter } from "./routes/clarify.js";
 
 const app = express();
 const port = Number(process.env.PORT ?? 4000);
@@ -27,6 +28,7 @@ app.use("/api/apps", appsRouter);
 app.use("/api/apps", runRouter);
 app.use("/api/apps", chatRouter);
 app.use("/api/apps", refineRouter);
+app.use("/api/clarify", clarifyRouter);
 app.use("/api/share", shareRouter);
 
 app.get("/health", async (_req, res) => {
