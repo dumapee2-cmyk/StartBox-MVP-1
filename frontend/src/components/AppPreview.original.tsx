@@ -17,38 +17,25 @@ export function buildIframeHtml(code: string, appId: string, mobile: boolean): s
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&family=DM+Serif+Display:ital@0;1&family=Space+Grotesk:wght@400;500;600;700&family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <script crossorigin src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://cdn.tailwindcss.com/3.4.17"></script>
   <script>
-    // Guard: verify Tailwind loaded
-    if (typeof tailwind === 'undefined') {
-      console.warn('[StartBox] Tailwind CDN failed — falling back to inline CSS utilities');
-      window.__sbTailwindFailed = true;
-    }
-  </script>
-  <script>
-    // Configure Tailwind (runs after either primary or fallback load)
-    if (typeof tailwind !== 'undefined' && tailwind.config) {
-      tailwind.config = {
-        theme: {
-          extend: {
-            fontFamily: {
-              sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
-              serif: ['Playfair Display', 'DM Serif Display', 'Georgia', 'serif'],
-              display: ['Space Grotesk', 'Sora', 'Inter', 'sans-serif'],
-            },
-            spacing: {
-              '4.5': '1.125rem',
-              '13': '3.25rem',
-              '15': '3.75rem',
-              '18': '4.5rem',
-            },
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
+            serif: ['Playfair Display', 'DM Serif Display', 'Georgia', 'serif'],
+            display: ['Space Grotesk', 'Sora', 'Inter', 'sans-serif'],
+          },
+          spacing: {
+            '4.5': '1.125rem',
+            '13': '3.25rem',
+            '15': '3.75rem',
+            '18': '4.5rem',
           },
         },
-      };
-    } else {
-      console.warn('[StartBox] Tailwind CSS not available — utilities will not apply');
-      window.__sbTailwindFailed = true;
-    }
+      },
+    };
   </script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -67,7 +54,7 @@ export function buildIframeHtml(code: string, appId: string, mobile: boolean): s
       window['react-dom'] = window.ReactDOM;
     }
   </script>
-  <script crossorigin src="https://unpkg.com/lucide-react@0.575.0/dist/umd/lucide-react.js"></script>
+  <script crossorigin src="https://unpkg.com/lucide-react@0.460.0/dist/umd/lucide-react.js"></script>
   <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
@@ -82,44 +69,6 @@ export function buildIframeHtml(code: string, appId: string, mobile: boolean): s
       font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
     }
     #root { min-height: 100vh; }
-
-    /* ── Critical Tailwind fallbacks — only activate when Tailwind CDN fails ── */
-    /* These prevent total layout collapse. Tailwind overrides them when loaded. */
-    .min-h-screen { min-height: 100vh; }
-    .flex { display: flex; }
-    .grid { display: grid; }
-    .hidden { display: none; }
-    .block { display: block; }
-    .inline-flex { display: inline-flex; }
-    .items-center { align-items: center; }
-    .justify-between { justify-content: space-between; }
-    .justify-center { justify-content: center; }
-    .gap-1 { gap: 0.25rem; } .gap-2 { gap: 0.5rem; } .gap-3 { gap: 0.75rem; } .gap-4 { gap: 1rem; } .gap-6 { gap: 1.5rem; }
-    .p-2 { padding: 0.5rem; } .p-4 { padding: 1rem; } .p-6 { padding: 1.5rem; }
-    .px-3 { padding-left: 0.75rem; padding-right: 0.75rem; } .px-4 { padding-left: 1rem; padding-right: 1rem; } .px-6 { padding-left: 1.5rem; padding-right: 1.5rem; }
-    .py-2 { padding-top: 0.5rem; padding-bottom: 0.5rem; } .py-4 { padding-top: 1rem; padding-bottom: 1rem; } .py-8 { padding-top: 2rem; padding-bottom: 2rem; }
-    .m-0 { margin: 0; } .mb-2 { margin-bottom: 0.5rem; } .mb-4 { margin-bottom: 1rem; } .mt-4 { margin-top: 1rem; }
-    .w-full { width: 100%; } .h-full { height: 100%; }
-    .max-w-5xl { max-width: 64rem; } .mx-auto { margin-left: auto; margin-right: auto; }
-    .rounded-lg { border-radius: 0.5rem; } .rounded-xl { border-radius: 0.75rem; } .rounded-2xl { border-radius: 1rem; } .rounded-full { border-radius: 9999px; }
-    .bg-gray-50 { background-color: #f9fafb; } .bg-white { background-color: #fff; }
-    .bg-gray-900 { background-color: #111827; } .bg-black { background-color: #000; }
-    .text-white { color: #fff; } .text-gray-900 { color: #111827; } .text-gray-600 { color: #4b5563; } .text-gray-500 { color: #6b7280; } .text-gray-400 { color: #9ca3af; }
-    .text-sm { font-size: 0.875rem; } .text-lg { font-size: 1.125rem; } .text-xl { font-size: 1.25rem; } .text-2xl { font-size: 1.5rem; } .text-3xl { font-size: 1.875rem; }
-    .font-medium { font-weight: 500; } .font-semibold { font-weight: 600; } .font-bold { font-weight: 700; }
-    .border { border-width: 1px; border-style: solid; } .border-gray-200 { border-color: #e5e7eb; }
-    .shadow-sm { box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
-    .overflow-hidden { overflow: hidden; } .overflow-auto { overflow: auto; }
-    .sticky { position: sticky; } .top-0 { top: 0; } .z-50 { z-index: 50; }
-    .fixed { position: fixed; } .inset-0 { top: 0; right: 0; bottom: 0; left: 0; }
-    .relative { position: relative; } .absolute { position: absolute; }
-    .cursor-pointer { cursor: pointer; }
-    .transition-colors { transition-property: color, background-color, border-color; transition-duration: 150ms; }
-    .flex-col { flex-direction: column; } .flex-1 { flex: 1 1 0%; } .flex-shrink-0 { flex-shrink: 0; }
-    .space-y-2 > * + * { margin-top: 0.5rem; } .space-y-4 > * + * { margin-top: 1rem; }
-    .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .text-center { text-align: center; }
-    .opacity-50 { opacity: 0.5; } .opacity-75 { opacity: 0.75; }
 
     /* ── Text visibility safety net — scoped to .sb-fallback namespace ── */
     h1, h2, h3, h4, h5, h6 { color: inherit; }
@@ -223,23 +172,8 @@ export function buildIframeHtml(code: string, appId: string, mobile: boolean): s
     }
     .grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
     .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    .grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
     .grid-cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-    .justify-around { justify-content: space-around; }
-    .justify-evenly { justify-content: space-evenly; }
-    .items-end { align-items: flex-end; }
-    .items-stretch { align-items: stretch; }
-    .overflow-x-auto { overflow-x: auto; }
-    .w-10 { width: 2.5rem; } .h-10 { height: 2.5rem; }
-    .w-12 { width: 3rem; } .h-12 { height: 3rem; }
-    .max-w-7xl { max-width: 80rem; }
-    .bg-indigo-600 { background-color: #4f46e5; }
-    .bg-indigo-700 { background-color: #4338ca; }
-    .text-indigo-600 { color: #4f46e5; }
     .space-y-5 > * + * { margin-top: 1.25rem; }
-    .space-x-2 > * + * { margin-left: 0.5rem; }
-    .space-x-4 > * + * { margin-left: 1rem; }
     .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .whitespace-nowrap { white-space: nowrap; }
 
@@ -278,7 +212,7 @@ export function buildIframeHtml(code: string, appId: string, mobile: boolean): s
 
     /* ── Extended CSS variables (set by generated code) ── */
     :root {
-      --sb-secondary: #8b5cf6;
+      --sb-secondary: var(--sb-primary, #8b5cf6);
       --sb-accent: #f59e0b;
       --sb-surface: #ffffff;
       --sb-surface-elevated: #ffffff;
@@ -1276,9 +1210,6 @@ export function buildIframeHtml(code: string, appId: string, mobile: boolean): s
           // Direct property access — works with getters, frozen objects, etc.
           var val = target[prop];
           if (val !== undefined) return val;
-          // Don't intercept native SVG elements — they must render as HTML, not icons
-          var _svgNative = ['Circle','Rect','Path','Line','Text','G','Defs','Symbol','Use','Image','Polygon','Polyline','Ellipse','Svg','TSpan','TextPath','ClipPath','LinearGradient','RadialGradient','Stop','Mask','Pattern','ForeignObject'];
-          if (typeof prop === 'string' && _svgNative.indexOf(prop) >= 0) return undefined;
           // For PascalCase names that don't exist, return fallback component
           if (typeof prop === 'string' && prop.length > 0 && prop.charCodeAt(0) >= 65 && prop.charCodeAt(0) <= 90) {
             return _FallbackIcon;
@@ -1316,8 +1247,8 @@ export function buildIframeHtml(code: string, appId: string, mobile: boolean): s
   </script>
 
   <script>
-    // __sbStore reset below gives fresh in-memory state per render.
-    // localStorage is NOT cleared — useStore persistence is intentional.
+    // Clear stale state from previous generations so new apps start fresh
+    try { localStorage.clear(); } catch(e) {}
 
     // StartBox global reactive store — completely hook-free, safe to call ANYWHERE
     var __sbStore = {};
@@ -1353,9 +1284,9 @@ export function buildIframeHtml(code: string, appId: string, mobile: boolean): s
       fmt: {
         date: function(d) { return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); },
         time: function(d) { return new Date(d).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }); },
-        number: function(n) { var v = Number(n); return isNaN(v) ? '0' : v.toLocaleString(); },
-        currency: function(n) { var v = Number(n); return '$' + (isNaN(v) ? '0.00' : v.toFixed(2)); },
-        percent: function(n) { var v = Number(n); return (isNaN(v) ? 0 : Math.round(v)) + '%'; },
+        number: function(n) { return Number(n).toLocaleString(); },
+        currency: function(n) { return '$' + Number(n).toFixed(2); },
+        percent: function(n) { return Math.round(n) + '%'; },
         relative: function(d) {
           var s = Math.floor((Date.now() - new Date(d).getTime()) / 1000);
           if (s < 60) return 'just now';
@@ -1366,79 +1297,58 @@ export function buildIframeHtml(code: string, appId: string, mobile: boolean): s
       },
       toast: function(msg, type) {
         var el = document.createElement('div');
-        el.className = 'sb-toast sb-toast--' + (type || 'success');
-        el.textContent = msg;
-        document.body.appendChild(el);
-        setTimeout(function() { if (el.parentNode) el.parentNode.removeChild(el); }, 3000);
-      },
-      // Utility: generate hex color variants
-      color: function(hex, opacity) {
-        var r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
-        return 'rgba(' + r + ',' + g + ',' + b + ',' + (opacity || 1) + ')';
-      },
-      // Conditional className joiner: cn('a', cond && 'b', 'c') => 'a c' or 'a b c'
-      cn: function() {
-        var r = [];
-        for (var i = 0; i < arguments.length; i++) {
-          var a = arguments[i];
-          if (typeof a === 'string' && a) r.push(a);
-        }
-        return r.join(' ');
-      },
-      // Image helper — real images via picsum.photos (seed-based, deterministic)
-      img: function(keyword, width, height) {
-        var w = width || 400;
-        var h = height || 300;
-        var seed = String(keyword || 'placeholder').toLowerCase().replace(/[^a-z0-9]/g, '-');
-        return 'https://picsum.photos/seed/' + seed + '/' + w + '/' + h;
-      },
-    };
-
-    // Compatibility aliases: many generated apps call these helpers directly.
-    window.useStore = window.__sb.useStore;
-    window.toast = window.__sb.toast;
-    window.fmt = window.__sb.fmt;
-    window.color = window.__sb.color;
-    window.copy = window.__sb.copy;
-    window.cn = window.__sb.cn;
-    window.sbAI = window.__sbAI;
-    window.img = window.__sb.img;
-  </script>
-
-  <script>
-    // React ErrorBoundary — catches render errors without killing the whole app
-    (function() {
-      function EB(props) { this.state = { hasError: false, error: null }; }
-      EB.prototype = Object.create(React.Component.prototype);
-      EB.prototype.constructor = EB;
-      EB.getDerivedStateFromError = function(error) { return { hasError: true, error: error }; };
-      EB.prototype.componentDidCatch = function(error, info) {
         console.error('[StartBox] React render error:', error, info);
       };
       EB.prototype.render = function() {
-        if (this.state.hasError) {
-          var msg = this.state.error ? String(this.state.error.message || this.state.error) : 'Unknown error';
-          return React.createElement('div', { className: 'sb-error' },
-            React.createElement('h2', null, 'Something went wrong'),
-            React.createElement('pre', null, msg),
-            React.createElement('button', {
-              className: 'glass-btn glass-btn-primary',
-              style: { marginTop: '1rem' },
-              onClick: function() { location.reload(); }
-            }, 'Reload App')
-          );
-        }
-        return this.props.children;
-      };
-      window.__SBErrorBoundary = EB;
-    })();
-  </script>
+      if (!inKnownNav && !nearTop && !nearBottom) return false;
 
-  <script>
+      var tabLikeClass = /(tab|nav|menu|pill|chip|segment)/.test(className);
+      var shortLabel = text.length > 0 && text.length <= 28;
+      return inKnownNav || tabLikeClass || shortLabel;
+    }
+
+    function __sbFindPanelForTab(tab) {
+      var tokens = __sbGetTabTokens(tab);
+      if (!tokens.length) return null;
+
+      var panelCandidates = document.querySelectorAll(
+        'main [id], main [data-tab], main [data-page], section[id], section[data-tab], section[data-page], article[id], article[data-tab], article[data-page], [role="tabpanel"], [data-view]'
+      );
+
+      var bestNode = null;
+      var bestScore = 0;
+      for (var i = 0; i < panelCandidates.length; i++) {
+        var node = panelCandidates[i];
+        if (!node || node === tab || (node.contains && node.contains(tab))) continue;
+        if (node.closest && node.closest('nav,header,.sb-nav,.sb-nav-tabs')) continue;
+
+        var heading = node.querySelector && node.querySelector('h1,h2,h3,h4,[data-title]');
+        var haystack = __sbNormalizeToken([
+          node.getAttribute('id'),
+          node.getAttribute('data-tab'),
+          node.getAttribute('data-page'),
+          node.getAttribute('aria-label'),
+          node.getAttribute('data-view'),
+          heading ? heading.textContent : ''
+        ].join(' '));
+        if (!haystack) continue;
+
+        var score = 0;
+        for (var j = 0; j < tokens.length; j++) {
+          if (haystack.indexOf(tokens[j]) !== -1) score += 1;
+        }
+        if (score > bestScore) {
+          bestScore = score;
+          bestNode = node;
+        }
+      }
+      return bestScore >= 1 ? bestNode : null;
+    }
+
+    function __sbSwapVisiblePanel(panel) {
+      if (!panel || !panel.parentElement) return false;
     // Auto-wrap ReactDOM.createRoot render with ErrorBoundary + ForceUpdate for crash protection
     // and global store reactivity. Generated code doesn't need to know about any of this.
-    // Guarded: skip if React/ReactDOM CDN failed to load.
-    if (!window.__sbCdnFailed && typeof ReactDOM !== 'undefined' && ReactDOM.createRoot) {
     (function() {
       // ForceUpdate wrapper — re-renders the tree when __sbStore changes
       function SBStoreProvider(props) {
@@ -1465,10 +1375,9 @@ export function buildIframeHtml(code: string, appId: string, mobile: boolean): s
         return root;
       };
     })();
-    } // end CDN guard
   </script>
 
-  <script type="text/babel" data-presets="react,env,typescript">
+  <script type="text/babel" data-presets="react,env">
     ${code}
   </script>
 

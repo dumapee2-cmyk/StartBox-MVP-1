@@ -19,7 +19,7 @@ const refineRateLimiter = rateLimit({
 });
 
 const refineRequestSchema = z.object({
-  instruction: z.string().min(3).max(2000),
+  instruction: z.string().min(1).max(2000),
   mode: z.enum(["build", "visual_edit", "discuss"]),
 });
 

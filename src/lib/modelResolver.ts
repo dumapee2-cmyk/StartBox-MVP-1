@@ -1,17 +1,10 @@
 /**
- * Centralized model resolution — picks provider-appropriate model IDs
- * based on ANTHROPIC_BASE_URL detection and env overrides.
+ * Centralized model resolution — picks model IDs based on env overrides.
  */
-
-import { detectCapabilities, type LLMCapabilities } from "./llmCompat.js";
 
 export type ModelTier = "fast" | "standard" | "premium";
 
-const KIMI_DEFAULTS: Record<ModelTier, string> = {
-  fast: "kimi-k2.5",
-  standard: "kimi-k2.5",
-  premium: "kimi-k2.5",
-};
+const MODEL_ID = "kimi-k2.5";
 
 const TIER_ENV_KEYS: Record<ModelTier, string> = {
   fast: "AI_MODEL_FAST",
@@ -21,24 +14,10 @@ const TIER_ENV_KEYS: Record<ModelTier, string> = {
 
 /**
  * Resolve a model ID for the given tier, respecting env overrides first,
- * then falling back to provider-appropriate defaults.
+ * then falling back to the default model.
  */
 export function resolveModel(tier: ModelTier): string {
-  const envKey = TIER_ENV_KEYS[tier];
-  const envValue = process.env[envKey];
+  const envValue = process.env[TIER_ENV_KEYS[tier]];
   if (envValue) return envValue;
-  return KIMI_DEFAULTS[tier];
+  return MODEL_ID;
 }
-
-/** Whether the current provider supports Anthropic-style tool_choice. */
-export function supportsToolUse(): boolean {
-  return detectCapabilities().supportsToolUse;
-}
-
-/** Whether the current provider supports cache_control on messages. */
-export function supportsCacheControl(): boolean {
-  return detectCapabilities().supportsCacheControl;
-}
-
-/** Re-export for convenience. */
-export { detectCapabilities, type LLMCapabilities };

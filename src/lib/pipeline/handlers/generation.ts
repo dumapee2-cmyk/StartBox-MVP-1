@@ -30,9 +30,7 @@ export async function handleGeneration(ctx: PipelineContext): Promise<StateTrans
     const codeResult = await generateReactCode(
       ctx.intent,
       ctx.prompt,
-      ctx.model,
       ctx.onProgress,
-      ctx.contextBrief,
     );
 
     if (codeResult) {

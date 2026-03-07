@@ -110,6 +110,28 @@ function progressFromStatus(message: string): number {
   return [8, 20, 35, 55, 78, 92][idx];
 }
 
+function sanitizeGenerationError(message: string): string {
+  const msg = message.trim();
+  if (!msg) return 'Generation failed. Please try again.';
+
+  if (msg.includes('Unexpected end of JSON input')) {
+    return 'Generation failed due to an incomplete server response. Please try again.';
+  }
+  if (msg.includes('NO_CODE_PRODUCED')) {
+    return 'Code generation failed — the AI service may be temporarily unavailable. Please try again.';
+  }
+  if (
+    msg.includes('invalid_enum_value') ||
+    msg.includes("Expected 'tool'") ||
+    msg.includes('ZodError') ||
+    (msg.startsWith('[') && msg.includes('"path"') && msg.includes('"message"'))
+  ) {
+    return 'App configuration error — please try again.';
+  }
+
+  return msg;
+}
+
 export function GeneratorPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const restored = useRef(loadState());
@@ -397,7 +419,7 @@ export function GeneratorPage() {
 
   function handleStreamError(msg: string) {
     setGenerating(false);
-    addMessage('ai', msg, 'error');
+    addMessage('ai', sanitizeGenerationError(msg), 'error');
   }
 
   // ── Handlers ──
@@ -434,6 +456,21 @@ export function GeneratorPage() {
       has_app: false,
     });
     if (orchestrated) {
+      if (orchestrated.action === 'clarify') {
+        const questions = (orchestrated.clarifying_questions ?? []).slice(0, 3);
+        const clarifyText = questions.length > 0
+          ? [
+              orchestrated.assistant_message || 'Please clarify these points before I generate:',
+              '',
+              ...questions.map((q, i) => `${i + 1}. ${q}`),
+            ].join('\n')
+          : (orchestrated.assistant_message || 'Please provide more detail so I can generate a high-quality app.');
+        addMessage('ai', clarifyText, 'message');
+        setGenerating(false);
+        setStatusMessage('');
+        setProgressPercent(0);
+        return;
+      }
       generationPrompt = orchestrated.optimized_text?.trim() || trimmed;
       if (orchestrated.assistant_message) {
         addMessage('ai', orchestrated.assistant_message, 'narrative');
@@ -449,7 +486,7 @@ export function GeneratorPage() {
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
       const msg = err instanceof Error ? err.message : 'Generation failed. Please try again.';
-      handleStreamError(msg);
+      handleStreamError(sanitizeGenerationError(msg));
     } finally {
       abortRef.current = null;
     }

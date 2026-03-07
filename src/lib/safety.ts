@@ -3,6 +3,7 @@ import rateLimit from "express-rate-limit";
 export const generateRateLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 5,
+  validate: false,
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: "Rate limit exceeded. Max 5 app generations per hour." },

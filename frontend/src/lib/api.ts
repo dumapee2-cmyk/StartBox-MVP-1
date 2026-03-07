@@ -1,9 +1,49 @@
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
+function normalizeErrorMessage(status: number, statusText: string, fallback: string) {
+  return `${fallback} (${status}${statusText ? ` ${statusText}` : ''})`;
+}
+
+async function readResponsePayload(res: Response): Promise<unknown> {
+  const raw = await res.text();
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return raw;
+  }
+}
+
+async function readErrorMessage(res: Response, fallback: string): Promise<string> {
+  const payload = await readResponsePayload(res);
+  if (payload && typeof payload === 'object' && 'message' in payload) {
+    const msg = (payload as { message?: unknown }).message;
+    if (typeof msg === 'string' && msg.trim()) return msg;
+  }
+  if (typeof payload === 'string') {
+    const text = payload.trim();
+    if (text) return text.slice(0, 300);
+  }
+  return normalizeErrorMessage(res.status, res.statusText, fallback);
+}
+
 async function parseResponse<T>(res: Response): Promise<T> {
-  const data = await res.json();
-  if (!res.ok) throw Object.assign(new Error(data.message ?? 'Request failed'), { status: res.status });
-  return data as T;
+  const payload = await readResponsePayload(res);
+  if (!res.ok) {
+    const message =
+      payload && typeof payload === 'object' && 'message' in payload && typeof (payload as { message?: unknown }).message === 'string'
+        ? ((payload as { message: string }).message || 'Request failed')
+        : normalizeErrorMessage(res.status, res.statusText, 'Request failed');
+    throw Object.assign(new Error(message), { status: res.status });
+  }
+  if (payload === null) {
+    throw Object.assign(new Error('Empty response payload'), { status: res.status });
+  }
+  if (typeof payload === 'string') {
+    throw Object.assign(new Error('Invalid JSON response payload'), { status: res.status });
+  }
+  return payload as T;
 }
 
 // ── AppSpec v2 Types ─────────────────────────────────────────
@@ -105,7 +145,6 @@ export interface GenerateResult {
   quality_breakdown?: QualityBreakdown;
   latest_pipeline_summary?: string;
   model_requested?: 'auto' | 'kimi' | 'sonnet' | 'opus';
-  model_normalized?: 'auto' | 'kimi';
   model_resolved?: string;
   provider_resolved?: 'kimi' | 'anthropic' | 'unknown' | string;
   shareUrl: string;
@@ -178,13 +217,19 @@ export function generateStream(
     });
 
     if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.message ?? 'Generation failed');
+      const message = await readErrorMessage(res, 'Generation failed');
+      throw new Error(message);
     }
 
-    const reader = res.body!.getReader();
+    if (!res.body) {
+      throw new Error('Generation stream unavailable (empty response body)');
+    }
+
+    const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    let sawAnyEvent = false;
+    let sawTerminalEvent = false;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -198,10 +243,19 @@ export function generateStream(
         if (line.startsWith('data: ')) {
           try {
             const event = JSON.parse(line.slice(6)) as ProgressEvent;
+            sawAnyEvent = true;
+            if (event.type === 'done' || event.type === 'error') sawTerminalEvent = true;
             onEvent(event);
           } catch { /* ignore parse errors */ }
         }
       }
+    }
+
+    if (!sawAnyEvent) {
+      throw new Error('Generation stream closed before any events were received.');
+    }
+    if (!sawTerminalEvent) {
+      throw new Error('Generation stream ended unexpectedly before completion.');
     }
   })();
 
@@ -241,7 +295,9 @@ export async function clarifyPrompt(prompt: string): Promise<ClarifyResult> {
     body: JSON.stringify({ prompt }),
   });
   if (!res.ok) return { clear: true }; // fail-open
-  return res.json();
+  const payload = await readResponsePayload(res);
+  if (!payload || typeof payload !== 'object') return { clear: true };
+  return payload as ClarifyResult;
 }
 
 export const api = {

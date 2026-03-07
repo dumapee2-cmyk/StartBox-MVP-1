@@ -108,6 +108,11 @@ export interface UIBlueprint {
   };
   component_tree?: string[];
   interaction_plan?: string[];
+  interaction_map?: Array<{
+    element: string;
+    action: string;
+    state_change: string;
+  }>;
   state_design?: {
     empty: string;
     loading: string;

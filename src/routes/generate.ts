@@ -5,6 +5,7 @@ import { generateRateLimiter, checkContentSafety } from "../lib/safety.js";
 import { canSpend, getDailySpend, getDailyCap } from "../lib/costTracker.js";
 import type { ProgressCallback } from "../lib/progressEmitter.js";
 import { resolveModel } from "../lib/modelResolver.js";
+import type { GenerateResult } from "../types/index.js";
 
 export const generateRouter = Router();
 
@@ -13,8 +14,27 @@ const generateBodySchema = z.object({
   model: z.enum(["auto", "kimi", "sonnet", "opus"]).optional().default("auto"),
 });
 
-function normalizeRequestedModel(model: "auto" | "kimi" | "sonnet" | "opus"): "auto" | "kimi" {
-  return model === "auto" ? "auto" : "kimi";
+export function buildGenerateResponseMetadata(modelRequested: z.infer<typeof generateBodySchema>["model"]) {
+  return {
+    model_requested: modelRequested,
+    model_resolved: resolveModel("standard"),
+    provider_resolved: "kimi" as const,
+  };
+}
+
+export function buildSseDoneEvent(
+  result: GenerateResult,
+  modelRequested: z.infer<typeof generateBodySchema>["model"],
+) {
+  if (!result.generated_code || result.generated_code.trim().length === 0) return null;
+  return {
+    type: "done" as const,
+    message: "Complete",
+    data: {
+      ...result,
+      ...buildGenerateResponseMetadata(modelRequested),
+    },
+  };
 }
 
 generateRouter.post("/", generateRateLimiter, async (req, res) => {
@@ -67,21 +87,14 @@ generateRouter.post("/", generateRateLimiter, async (req, res) => {
       };
 
       try {
-        const result = await generateFromPrompt(body.prompt, body.model, onProgress, abortController.signal);
+        const requestedModel = body.model;
+        const pipelineModel = "kimi" as const;
+        const result = await generateFromPrompt(body.prompt, pipelineModel, onProgress, abortController.signal);
         // Only emit done if we have actual generated code
         if (!disconnected) {
-          if (result.generated_code) {
-            res.write(`data: ${JSON.stringify({
-              type: "done",
-              message: "Complete",
-              data: {
-                ...result,
-                model_requested: body.model,
-                model_normalized: normalizeRequestedModel(body.model),
-                model_resolved: resolveModel("standard"),
-                provider_resolved: "kimi",
-              },
-            })}\n\n`);
+          const doneEvent = buildSseDoneEvent(result, requestedModel);
+          if (doneEvent) {
+            res.write(`data: ${JSON.stringify(doneEvent)}\n\n`);
           } else {
             res.write(`data: ${JSON.stringify({ type: "error", message: "Generation completed but no code was produced. Please try again.", error_code: "NO_CODE_PRODUCED" })}\n\n`);
           }
@@ -96,11 +109,28 @@ generateRouter.post("/", generateRateLimiter, async (req, res) => {
             console.error("Zod validation error in generation:", error.issues);
           } else if (error instanceof Error) {
             msg = error.message;
-            if (msg.includes("timed out")) errorCode = "PROVIDER_TIMEOUT";
-            else if (msg.includes("NO_CODE_PRODUCED")) errorCode = "NO_CODE_PRODUCED";
-            else if (msg.includes("connection pool")) errorCode = "DB_CONNECTION_ERROR";
+            if (msg.includes("timed out")) {
+              errorCode = "PROVIDER_TIMEOUT";
+            } else if (
+              msg.includes("invalid_enum_value") ||
+              msg.includes("Expected 'tool'") ||
+              msg.includes("ZodError") ||
+              (msg.trim().startsWith("[") && msg.includes('"path"') && msg.includes('"message"'))
+            ) {
+              errorCode = "VALIDATION_ERROR";
+              msg = "App configuration error — please try again.";
+            } else if (msg.includes("NO_CODE_PRODUCED")) {
+              errorCode = "NO_CODE_PRODUCED";
+              msg = "Code generation failed — the AI service may be temporarily unavailable. Please try again.";
+            } else if (msg.includes("connection pool")) {
+              errorCode = "DB_CONNECTION_ERROR";
+            }
           }
-          res.write(`data: ${JSON.stringify({ type: "error", message: msg, error_code: errorCode })}\n\n`);
+          try {
+            res.write(`data: ${JSON.stringify({ type: "error", message: msg, error_code: errorCode })}\n\n`);
+          } catch (writeErr) {
+            console.error("Failed to deliver error event to client:", writeErr);
+          }
         }
       } finally {
         clearInterval(heartbeat);
@@ -108,22 +138,21 @@ generateRouter.post("/", generateRateLimiter, async (req, res) => {
       }
     } else {
       // ── Standard JSON mode (backwards compatible) ──
-      const routeTimeoutMs = Number(process.env.STARTBOX_ROUTE_TIMEOUT_MS ?? 300000);
+      const routeTimeoutMs = Number(process.env.STARTBOX_ROUTE_TIMEOUT_MS ?? 900000);
+      const requestedModel = body.model;
+      const pipelineModel = "kimi" as const;
       const result = await Promise.race([
-        generateFromPrompt(body.prompt, body.model),
+        generateFromPrompt(body.prompt, pipelineModel),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error(`Generation timed out after ${routeTimeoutMs}ms`)), routeTimeoutMs),
         ),
       ]);
-      if (!result.generated_code) {
+      if (!result.generated_code || result.generated_code.trim().length === 0) {
         return res.status(502).json({ message: "Generation completed but no code was produced", error_code: "NO_CODE_PRODUCED" });
       }
       return res.status(201).json({
         ...result,
-        model_requested: body.model,
-        model_normalized: normalizeRequestedModel(body.model),
-        model_resolved: resolveModel("standard"),
-        provider_resolved: "kimi",
+        ...buildGenerateResponseMetadata(requestedModel),
       });
     }
   } catch (error) {

@@ -3,8 +3,7 @@ import { generateReactCode } from "../../codeGenerator.js";
 
 /**
  * PLANNING state: runs the full code generation pipeline including
- * parallel planning agents (Design Architect + Content Strategist),
- * code synthesis, quality scoring, and auto-fix repair.
+ * Content Strategist planning, code synthesis, quality scoring, and repair.
  *
  * This delegates to `generateReactCode` which handles the inner loop:
  *   planning agents → code synthesis → quality scoring → repair
@@ -29,9 +28,7 @@ export async function handlePlanning(ctx: PipelineContext): Promise<StateTransit
     const codeResult = await generateReactCode(
       ctx.intent,
       ctx.prompt,
-      ctx.model,
       ctx.onProgress,
-      ctx.contextBrief,
     );
 
     if (codeResult) {
@@ -44,7 +41,6 @@ export async function handlePlanning(ctx: PipelineContext): Promise<StateTransit
       ctx.qualityBreakdown = codeResult.quality_breakdown;
       ctx.pipelineArtifact = codeResult.pipeline_artifact;
       ctx.pipelineSummary = `Selected ${codeResult.pipeline_artifact.selected_candidate} (${codeResult.quality_score}/100)`;
-      ctx.designBlueprint = codeResult.pipeline_artifact.ui_blueprint ?? null;
     } else {
       console.warn("Code generation returned null (attempt 1) — will retry in GENERATING state");
       ctx.onProgress?.({ type: "status", message: "First build attempt incomplete — retrying..." });

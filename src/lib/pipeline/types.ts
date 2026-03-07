@@ -46,7 +46,6 @@ export interface PipelineContext {
   spec: import("../../types/index.js").AppSpec | null;
 
   // Design planning artifacts
-  designBlueprint: unknown | null;
   contentMap: unknown | null;
 
   // Code generation artifacts
@@ -59,6 +58,7 @@ export interface PipelineContext {
   // Quality artifacts
   qualityScore: number | null;
   qualityBreakdown: QualityBreakdown | null;
+  latestFactoryIssues?: string[] | null;
   pipelineArtifact: PipelineRunArtifact | null;
   pipelineSummary: string | null;
 

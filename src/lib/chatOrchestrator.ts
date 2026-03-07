@@ -13,9 +13,10 @@ export const orchestrateInputSchema = z.object({
 export type OrchestrateInput = z.infer<typeof orchestrateInputSchema>;
 
 const orchestrateOutputSchema = z.object({
-  action: z.enum(["generate", "refine", "discuss"]),
+  action: z.enum(["generate", "refine", "discuss", "clarify"]),
   optimized_text: z.string().min(1).max(4000),
   assistant_message: z.string().min(1).max(800),
+  clarifying_questions: z.array(z.string()).max(3).optional(),
   suggested_mode: z.enum(["build", "visual_edit", "discuss"]).optional(),
 });
 
@@ -26,17 +27,19 @@ Decide whether the user message should:
 - generate a new app
 - refine the current app
 - answer as discuss/advice
+- ask concise clarifying questions when the request is too vague for high-quality generation
 
 Rules:
 1. If has_app=false, action should be "generate".
 2. If has_app=true, action should usually be "refine" or "discuss" (not "generate").
-3. NEVER ask clarifying questions. Make the best first-pass assumption and proceed.
+3. Use "clarify" only when has_app=false and the request is too vague.
 4. Rewrite the user text into optimized_text that is specific, concise, and implementation-ready.
 5. assistant_message should be short and useful (one sentence).
 6. suggested_mode:
    - visual styling/layout request -> visual_edit
    - strategy/question request -> discuss
    - feature/logic request -> build
+7. For action="clarify", include 2-3 focused clarifying_questions.
 Respond with a single JSON object only.`;
 
 function isVaguePrompt(prompt: string): boolean {
@@ -46,6 +49,26 @@ function isVaguePrompt(prompt: string): boolean {
   if (/^(something|anything)\b/.test(p)) return true;
   if (/^improve it\b[.!?]*$/.test(p)) return true;
   return false;
+}
+
+function buildClarifyingQuestions(prompt: string): string[] {
+  const p = prompt.toLowerCase();
+  if (/fitness|health|workout|meal/.test(p)) {
+    return [
+      "Do you want tracking, coaching, or planning as the main workflow?",
+      "Should this target beginners, regular users, or advanced users?",
+    ];
+  }
+  if (/finance|money|budget|invest/.test(p)) {
+    return [
+      "Should this focus on budgeting, investing, or expense tracking?",
+      "Do you want dashboard-first or task/action-first UX?",
+    ];
+  }
+  return [
+    "What is the primary user workflow this app should optimize first?",
+    "Which two core features must be included in the first version?",
+  ];
 }
 
 function expandPromptForFirstPass(prompt: string): string {
@@ -78,31 +101,44 @@ function isVisualIntent(prompt: string): boolean {
 function normalizeForState(input: OrchestrateInput, result: OrchestrateResult): OrchestrateResult {
   let action = result.action;
   let suggested_mode = result.suggested_mode;
+  let clarifying_questions = result.clarifying_questions;
 
-  if (!input.has_app && action !== "generate") {
+  if (!input.has_app && action !== "generate" && action !== "clarify") {
     action = "generate";
     suggested_mode = undefined;
+    clarifying_questions = undefined;
   }
   if (input.has_app && action === "generate") {
     action = "refine";
+  }
+  if (input.has_app && action === "clarify") {
+    action = "refine";
+    clarifying_questions = undefined;
   }
 
   return {
     action,
     optimized_text: result.optimized_text || (input.has_app ? input.prompt : expandPromptForFirstPass(input.prompt)),
     assistant_message: result.assistant_message || "Using an optimized instruction.",
+    clarifying_questions,
     suggested_mode,
   };
 }
 
 function fallbackOrchestrate(input: OrchestrateInput): OrchestrateResult {
   if (!input.has_app) {
+    if (isVaguePrompt(input.prompt)) {
+      return {
+        action: "clarify",
+        optimized_text: input.prompt,
+        assistant_message: "I need two details to generate a high-quality result.",
+        clarifying_questions: buildClarifyingQuestions(input.prompt),
+      };
+    }
     return {
       action: "generate",
       optimized_text: expandPromptForFirstPass(input.prompt),
-      assistant_message: isVaguePrompt(input.prompt)
-        ? "Using best-fit assumptions to build a complete first version."
-        : "Generating from your prompt with an optimized execution plan.",
+      assistant_message: "Generating from your prompt with an optimized execution plan.",
     };
   }
 
@@ -169,9 +205,10 @@ export async function orchestrateChatInstruction(input: OrchestrateInput): Promi
             `user_prompt: ${input.prompt}`,
             "",
             "Return JSON with fields:",
-            "- action: generate|refine|discuss",
+            "- action: generate|refine|discuss|clarify",
             "- optimized_text",
             "- assistant_message",
+            "- clarifying_questions (optional array of strings, required for clarify)",
             "- suggested_mode (build|visual_edit|discuss, optional)",
           ].join("\n"),
         }],

@@ -2,6 +2,7 @@ import { appSpecSchema } from "./schema.js";
 import { translateEnglishPromptWithReasoning, type ReasonedIntent } from "./reasoner.js";
 import type { AppContextBrief } from "./contextResearch.js";
 import type { AppSpec } from "../types/index.js";
+import { extractDomainKeywordsFromPrompt } from "./domainKeywords.js";
 
 // Sanitize nav IDs to match schema regex /^[a-z_]+$/
 function sanitizeNavId(id: string): string {
@@ -25,13 +26,44 @@ function randomColor(): string {
   return FALLBACK_COLORS[Math.floor(Math.random() * FALLBACK_COLORS.length)];
 }
 
+const ALLOWED_LAYOUTS = ["tool", "analyzer", "generator", "dashboard", "planner"] as const;
+const ALLOWED_OUTPUT_FORMATS = ["markdown", "cards", "score_card", "report", "list", "plain"] as const;
+
+function normalizeLayout(layoutHint: string, primaryGoal: string): (typeof ALLOWED_LAYOUTS)[number] {
+  const raw = `${layoutHint} ${primaryGoal}`.toLowerCase();
+
+  for (const allowed of ALLOWED_LAYOUTS) {
+    if (raw.includes(allowed)) return allowed;
+  }
+  if (/(analy|score|audit|diagnos|review|inspect|evaluate)/.test(raw)) return "analyzer";
+  if (/(generat|create|writer|compose|synth|builder)/.test(raw)) return "generator";
+  if (/(plan|schedule|roadmap|timeline|calendar|task|itinerary)/.test(raw)) return "planner";
+  if (/(dashboard|overview|stats|metric|insight|profile|chat|conversation|feed)/.test(raw)) return "dashboard";
+  return "tool";
+}
+
+function normalizeOutputFormat(outputHint: string, primaryGoal: string): (typeof ALLOWED_OUTPUT_FORMATS)[number] {
+  const raw = `${outputHint} ${primaryGoal}`.toLowerCase();
+
+  for (const allowed of ALLOWED_OUTPUT_FORMATS) {
+    if (raw.includes(allowed)) return allowed;
+  }
+  if (/(score|grade|rating|risk score)/.test(raw)) return "score_card";
+  if (/(report|summary|analysis|breakdown|brief)/.test(raw)) return "report";
+  if (/(timeline|list|table|rows|steps|checklist)/.test(raw)) return "list";
+  if (/(card|grid|gallery|kanban|tile|timeline_with_cards)/.test(raw)) return "cards";
+  if (/(plain|text-only|text only)/.test(raw)) return "plain";
+  return "markdown";
+}
+
 function buildDeterministicAppSpec(intent: ReasonedIntent, originalPrompt: string): AppSpec {
+  const safeOutputFormat = normalizeOutputFormat(intent.output_format_hint, intent.primary_goal);
   const screens = intent.nav_tabs.map((tab, i) => ({
     nav_id: sanitizeNavId(tab.id),
-    layout: tab.layout,
+    layout: normalizeLayout(tab.layout, intent.primary_goal),
     hero: {
       title: i === 0 ? intent.primary_goal.slice(0, 60) : tab.purpose.slice(0, 60),
-      subtitle: i === 0 ? `Powered by AI for ${intent.domain}` : tab.purpose.slice(0, 120),
+      subtitle: i === 0 ? intent.primary_goal.slice(0, 120) : tab.purpose.slice(0, 120),
       cta_label: i === 0 ? "Run Analysis" : "Generate",
     },
     input_fields: [{
@@ -47,7 +79,7 @@ function buildDeterministicAppSpec(intent: ReasonedIntent, originalPrompt: strin
       temperature: 0.7,
       max_tokens: 800,
     },
-    output_format: intent.output_format_hint,
+    output_format: safeOutputFormat,
     output_label: i === 0 ? "Analysis" : "Results",
   }));
 
@@ -115,6 +147,7 @@ export async function runGenerationPipeline(
       { name: promptSnippet.slice(0, 50), description: `Core feature based on: ${promptSnippet}` },
     ],
     reasoning_summary: "[DEGRADED] LLM reasoner failed — this is a prompt-grounded fallback, not full AI planning",
+    domain_keywords: extractDomainKeywordsFromPrompt(promptSnippet, { max: 15 }),
     layout_blueprint: "flexible",
     animation_keywords: ["smooth", "subtle"],
     visual_requirements: {

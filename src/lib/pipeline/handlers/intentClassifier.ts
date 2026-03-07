@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { recordSpend, calculateCost } from "../../costTracker.js";
+import { resolveModel } from "../../modelResolver.js";
 
 export type IntentClass = "build_new" | "modify_existing" | "ambiguous" | "out_of_scope";
 
@@ -46,7 +47,7 @@ export async function classifyIntent(prompt: string): Promise<ClassifiedIntent> 
     return { classification: "build_new", confidence: 0.5, constraints: [] };
   }
 
-  const modelId = process.env.AI_MODEL_FAST || "claude-haiku-4-5-20251001";
+  const modelId = resolveModel("fast");
   const client = new Anthropic({
     apiKey,
     maxRetries: 0,

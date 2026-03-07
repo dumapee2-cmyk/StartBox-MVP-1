@@ -2,6 +2,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { withTimeout } from "./llmTimeout.js";
 import { recordSpend } from "./costTracker.js";
+import { resolveModel } from "./modelResolver.js";
+import { buildResearchSystemPrompt } from "./prompts/designPrompt.js";
 
 const competitorSchema = z.object({
   name: z.string(),
@@ -88,17 +90,17 @@ Be precise with field_labels — these become the actual input labels in the gen
 
 For cta_verbs, provide action words specific to this domain (e.g. "Analyze", "Scan", "Generate", "Score", "Review") — never generic words like "Submit" or "Go".
 
-For ui_component_suggestions, identify specific interactive UI patterns that real competitors in this space use. Be CONCRETE:
-GOOD: "SVG circular score ring with animated fill", "drag-and-drop card reordering", "before/after comparison slider", "animated typing indicator during processing", "collapsible accordion for detailed breakdowns", "horizontal scrollable history cards"
-BAD: "nice charts", "good layout", "modern design"
+	For ui_component_suggestions, identify specific interactive UI patterns that real competitors in this space use. Be CONCRETE:
+	GOOD: "single-metric progress indicator with clear labels", "drag-and-drop card reordering", "before/after comparison slider", "animated typing indicator during processing", "collapsible accordion for detailed breakdowns", "horizontal scrollable history cards"
+	BAD: "nice charts", "good layout", "modern design"
 
-For animation_style, describe the motion design language that fits this product category:
-GOOD: "Clinical precision: 200-300ms ease-out transitions, subtle slide-ups for results, gentle pulse on loading. Score rings animate fill clockwise over 1.2s with ease-in-out."
-BAD: "smooth animations"
+	For animation_style, describe the motion design language that fits this product category:
+	GOOD: "Clinical precision: 200-300ms ease-out transitions, subtle slide-ups for results, gentle pulse on loading. Progress indicators should animate smoothly without overlapping labels."
+	BAD: "smooth animations"
 
-For layout_blueprint, provide a specific spatial layout a developer can implement:
-GOOD: "Centered hero (max-w-2xl) with gradient header -> large textarea input -> prominent CTA -> results expand below with slide-up animation. Score ring left, breakdown cards right in 2-column grid. History as horizontal scrollable cards below."
-BAD: "clean layout with sections"
+	For layout_blueprint, provide a specific spatial layout a developer can implement:
+	GOOD: "Centered hero with clear headline -> primary action -> results region with responsive 2-column desktop / 1-column mobile behavior. Include clear visual hierarchy and spacing between sections."
+	BAD: "clean layout with sections"
 
 For item_display_patterns, identify every type of content item in this app and describe EXACTLY how competitors display it:
 GOOD: { content_type: "Pokemon cards", recommended_display: "Responsive card grid (grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4) with visual cards", card_structure: "Gradient image area (type-colored: Fire=orange, Water=blue, Grass=green) showing Pokemon silhouette at 60% height -> Bold name + type badge pill -> Stats bar row (HP, ATK, DEF) with tiny progress bars -> Rarity star indicator + market price" }
@@ -181,15 +183,15 @@ const toolInputSchema = {
       items: { type: "string" },
       minItems: 1,
       maxItems: 8,
-      description: "Specific UI component patterns competitors use, e.g. 'circular score ring with animated fill', 'drag-and-drop meal cards', 'before/after slider comparison', 'animated progress stepper'",
+      description: "Specific UI component patterns competitors use, e.g. 'clear single-metric progress indicator', 'drag-and-drop meal cards', 'before/after slider comparison', 'animated progress stepper'",
     },
     animation_style: {
       type: "string",
-      description: "Motion design language for this domain, e.g. 'Clinical 200-300ms ease-out, subtle slide-ups, score rings animate over 1.2s' or 'Energetic bouncy animations with confetti for gamified fitness'",
+      description: "Motion design language for this domain, e.g. 'Clinical 200-300ms ease-out with subtle slide-ups and smooth progress transitions' or 'Energetic bouncy animations with confetti for gamified fitness'",
     },
     layout_blueprint: {
       type: "string",
-      description: "Spatial layout recommendation, e.g. 'Centered hero max-w-2xl -> textarea input -> CTA -> expanding results below (like Cal AI scan flow)' or 'Split panel: left form, right live preview with variant cards (like Jasper.ai)'",
+      description: "Spatial layout recommendation, e.g. 'Centered hero -> primary action -> expanding results below with responsive desktop/mobile behavior' or 'Split panel: left form, right live preview with variant cards'",
     },
     item_display_patterns: {
       type: "array",
@@ -230,14 +232,15 @@ export async function gatherAppContext(prompt: string): Promise<AppContextBrief 
   const timeoutMs = Number(process.env.STARTBOX_CONTEXT_TIMEOUT_MS ?? 45000);
 
   try {
+    const researchSystemPrompt = buildResearchSystemPrompt();
     const response = await withTimeout(
       (signal) => client.messages.create({
-        model: process.env.AI_MODEL_FAST || "claude-haiku-4-5-20251001",
+        model: resolveModel("fast"),
         max_tokens: 3072,
         system: [
           {
             type: "text" as const,
-            text: RESEARCH_SYSTEM_PROMPT,
+            text: researchSystemPrompt,
             cache_control: { type: "ephemeral" as const },
           },
         ],
